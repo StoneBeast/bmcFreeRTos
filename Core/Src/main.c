@@ -7,6 +7,8 @@
  * @Description  : main.c
  */
 
+//TODO: 处理i2c频繁锁死的问题
+
 /* USER CODE BEGIN Header */
 /**
  ******************************************************************************
@@ -59,7 +61,6 @@
 StackType_t bg_Stack[1024];     /* bgTask静态栈 */
 StaticTask_t bg_TaskBuffer;     /* bgTask buffer */
 SemaphoreHandle_t uart_mutex;   /* uart访问互斥量 */
-extern QueueHandle_t res_queue; /* 消息队列句柄, 用于接收返回信息 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -275,23 +276,21 @@ int eeprom_task_func(int arcg, char *argv[])
  */
 int ipmi_request_task_func(int argc, char *argv[])
 {
-    uint8_t req_ret = 0;
-    uint8_t data[]  = {0x55, 0xAA};
-    ipmb_recv_t recv; /* 用于接收返回结果 */
+    uint16_t data_len;
+    uint8_t* res_data;
 
-    /* 临时提升task优先级，防止信息传输时发生任务切换 */
-    vTaskPrioritySet(NULL, 5);
-    req_ret = ipmi_request(0x82, CMD_GET_DEVICE_ID, data, 2);
-    /* 恢复优先级 */
-    vTaskPrioritySet(NULL, 1);
-    if (req_ret) /* 数据发送成功 */
-    {
-        PRINTF("request send success\r\n");
-        /* 通过消息队列等待并接收response */
-        xQueueReceive(res_queue, &recv, portMAX_DELAY);
-        PRINTF("data: 0x%02x 0x%02x\r\n", recv.msg[7], recv.msg[8]);
-    } else
+    res_data = ipmi_get_device_ID(0x82, &data_len);
+    if (res_data == NULL)
         PRINTF("request send error\r\n");
+    else {
+        PRINTF("data len: %d", data_len);
+        for (uint16_t i = 0; i < data_len; i++)
+            PRINTF(" 0x%02x ", res_data[i]);
+        
+        PRINTF("\r\n");
+
+        free(res_data);
+    }
 
     return 1;
 }

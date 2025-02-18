@@ -14,11 +14,13 @@
 
 #define REQUEST_FORMAT_LEN      7
 #define RESPONSE_FORMAT_LEN     8
+#define RESPONSE_DATA_START     6
 #define IPMI_BMC_LUN            0x00
 #define IPMI_BMC_ADDR           0x20
 #define VPX_BASE_HARDWARE_ADDR  0x40
 #define VPX_HARDWARE_ADDR(GA)   ((unsigned char)(VPX_BASE_HARDWARE_ADDR + GA))
 #define VPX_IPMB_ADDR(ha)       ((unsigned char)(ha<<1))
+#define WAIT_RESPONSE_MAX       50
 
 #define ASSERENT_VPX_HARDWARE_ADDR(addr)  ((addr >= 0x41) && (addr <= 0x5F))
 

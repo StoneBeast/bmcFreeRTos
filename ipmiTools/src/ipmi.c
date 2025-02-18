@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-18 14:47:55
+ * @LastEditTime : 2025-02-18 18:05:18
  * @Description  : ipmi功能实现
  */
 
@@ -30,6 +30,7 @@ link_list_manager* ipmi_request_manager;
 link_list_manager* timeout_request_manager;
 link_list_manager* ipmi_res_manager;
 QueueHandle_t res_queue;
+SemaphoreHandle_t i2c_mutex; 
 
 static uint8_t get_iocal_addr(void)
 {
@@ -126,7 +127,18 @@ static uint8_t generic_rqseq(void)
 
 static uint8_t send_ipmi_msg(uint8_t* msg, uint16_t len)
 {
-    return send_i2c_msg(msg, len);
+    uint8_t send_ret;
+    UBaseType_t cur_priority;
+
+    cur_priority = uxTaskPriorityGet(NULL);
+    
+    /* 设置最高优先级，防止发送被中断 */
+    vTaskPrioritySet(NULL, configMAX_PRIORITIES-1);
+    send_ret = send_i2c_msg(msg, len);
+    /* 恢复优先级 */
+    vTaskPrioritySet(NULL, cur_priority);
+
+    return send_ret;
 }
 
 void req_timeout_handler(void* req)
@@ -165,7 +177,6 @@ static int res_handle_task_func(int argc, char* argv[])
     {
         temp = (ipmb_recv_t*)(ipmi_res_manager->find_by_pos(&(ipmi_res_manager->list), (ipmi_res_manager->node_number)-1));
         rqSeq = ((temp->msg[4])>>2);
-        // PRINTF("\r\nRqSeq: %d, data: 0x%02x 0x%02x\r\n", rqSeq, temp->msg[7], temp->msg[8]);
         
         xQueueSend(res_queue, temp, portMAX_DELAY);
 
@@ -202,6 +213,7 @@ uint8_t init_bmc(void)
     if (!init_ipmb())
         return 0;
     init_sensor();
+    i2c_mutex = xSemaphoreCreateMutex();
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
@@ -291,4 +303,34 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
     ipmi_res_manager->add2list(&(ipmi_res_manager->list), &recv, sizeof(ipmb_recv_t), &(rqSeq), 1);
 
     return 1;
+}
+
+/*** 
+ * @brief 发送ipmi命令: GET_DEVICE_ID
+ * @param dev_ipmi_addr [uint8_t]   目标设备ipmb地址
+ * @param data_len[out] [uint16_t*] 返回数据包长度
+ * @return [uint8_t*]               [free]请求成功返回指向数据包的指针，超时则返回NULL
+ */
+uint8_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr, uint16_t* data_len)
+{
+    ipmb_recv_t temp_recv;
+    BaseType_t recv_ret;
+    uint8_t* ret_data;
+
+    if (!ipmi_request(dev_ipmi_addr, CMD_GET_DEVICE_ID, NULL, 0))
+        return NULL;
+    
+    recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+
+    if (recv_ret == pdFALSE) /* 接收失败 */
+    {
+        *data_len = 0;
+        return NULL;
+    }
+
+    *data_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
+    ret_data = (uint8_t*)malloc(*data_len);
+    memcpy(ret_data, &(temp_recv.msg[RESPONSE_DATA_START]), *data_len);
+
+    return ret_data;
 }

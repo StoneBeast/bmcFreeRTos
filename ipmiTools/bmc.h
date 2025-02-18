@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 15:49:44
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-07 15:42:58
+ * @LastEditTime : 2025-02-18 17:40:03
  * @Description  : 向外暴露的bmc接口
  */
 
@@ -24,6 +24,7 @@ uint8_t init_ipmc(void);
 uint8_t ipmi_request(uint8_t rs_sa, uint16_t NetFn_CMD, uint8_t* data, uint16_t data_len);
 uint8_t ipmi_response(uint8_t rq_sa, uint16_t NetFn_CMD, uint8_t cmpl_code, uint8_t* data, uint16_t data_len);
 
+uint8_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr, uint16_t* data_len);
 
 #endif //! __BMC_H
 
