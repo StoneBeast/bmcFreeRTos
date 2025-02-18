@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:27:16
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-14 16:37:40
+ * @LastEditTime : 2025-02-18 18:14:30
  * @Description  : ipmi相关配置
  */
 
@@ -22,6 +22,7 @@
 #define VPX_IPMB_ADDR(ha)       ((unsigned char)(ha<<1))
 #define WAIT_RESPONSE_MAX       50
 
+#define RES_DATA_LEN(msg_len)   ((uint16_t)(temp_recv.msg_len - RESPONSE_FORMAT_LEN))
 #define ASSERENT_VPX_HARDWARE_ADDR(addr)  ((addr >= 0x41) && (addr <= 0x5F))
 
 #define FILL_IN_MSG_TYPE(msg, NetFn_CMD, rs, rq, data, data_len) \

@@ -328,7 +328,7 @@ uint8_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr, uint16_t* data_len)
         return NULL;
     }
 
-    *data_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
+    *data_len = RES_DATA_LEN(temp_recv.msg_len);
     ret_data = (uint8_t*)malloc(*data_len);
     memcpy(ret_data, &(temp_recv.msg[RESPONSE_DATA_START]), *data_len);
 
