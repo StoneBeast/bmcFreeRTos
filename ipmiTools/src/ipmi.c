@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-18 18:05:18
+ * @LastEditTime : 2025-02-19 16:40:46
  * @Description  : ipmi功能实现
  */
 
@@ -31,6 +31,8 @@ link_list_manager* timeout_request_manager;
 link_list_manager* ipmi_res_manager;
 QueueHandle_t res_queue;
 SemaphoreHandle_t i2c_mutex; 
+
+static int scan_device(int argc, char* argv[]);
 
 static uint8_t get_iocal_addr(void)
 {
@@ -210,6 +212,12 @@ uint8_t init_bmc(void)
         .time_until = 0,
     };
 
+    Task_t scan_device_task = {
+        .task_func = scan_device,
+        .task_name = "device",
+        .task_desc = "display all device"
+    };
+
     if (!init_ipmb())
         return 0;
     init_sensor();
@@ -217,6 +225,7 @@ uint8_t init_bmc(void)
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
+    console_task_register(&scan_device_task);
     console_backgroung_task_register(&req_timeout_task);
     console_backgroung_task_register(&res_handle_task);
 
@@ -333,4 +342,26 @@ uint8_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr, uint16_t* data_len)
     memcpy(ret_data, &(temp_recv.msg[RESPONSE_DATA_START]), *data_len);
 
     return ret_data;
+}
+
+static int scan_device(int argc, char* argv[])
+{
+    uint8_t i = 0;
+    uint16_t data_len = 0;
+    uint8_t* res_data = NULL;
+
+    PRINTF("=================== Device List ===================\r\n");
+    PRINTF("Slot\tIPMB Addr\tDevice Name\t\r\n");
+
+    for (i = 0; i < SLOT_COUNT; i++)
+    {
+        res_data = ipmi_get_device_ID(VPX_IPMB_ADDR((VPX_BASE_HARDWARE_ADDR+1+i)), &data_len);
+
+        if (res_data)
+        {
+            PRINTF("%-4d\t0x%-8x\tDev%d\r\n", i, VPX_IPMB_ADDR((VPX_BASE_HARDWARE_ADDR+1+i)), i);
+        }
+    }
+
+    return 1;
 }
