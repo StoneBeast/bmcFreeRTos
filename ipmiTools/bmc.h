@@ -13,6 +13,7 @@
 #include "ipmiConfig.h"
 #include "ipmiMessage.h"
 #include "ipmiCommand.h"
+#include "ipmi.h"
 
 #ifdef IS_BMC
 uint8_t init_bmc(void);
@@ -24,7 +25,7 @@ uint8_t init_ipmc(void);
 uint8_t ipmi_request(uint8_t rs_sa, uint16_t NetFn_CMD, uint8_t* data, uint16_t data_len);
 uint8_t ipmi_response(uint8_t rq_sa, uint16_t NetFn_CMD, uint8_t cmpl_code, uint8_t* data, uint16_t data_len);
 
-uint8_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr, uint16_t* data_len);
+fru_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr);
 
 #endif //! __BMC_H
 

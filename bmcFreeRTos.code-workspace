@@ -26,7 +26,7 @@
             "editor.autoIndent": "advanced"
         },
         "makefile.configureOnOpen": false,
-        "files.autoSave": "afterDelay"
+        "files.autoSave": "onFocusChange"
     },
     "extensions": {
         "recommendations": [

@@ -3,11 +3,9 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-18 15:49:14
+ * @LastEditTime : 2025-02-20 15:42:00
  * @Description  : main.c
  */
-
-//TODO: 处理i2c频繁锁死的问题
 
 /* USER CODE BEGIN Header */
 /**
@@ -71,7 +69,6 @@ void MX_FREERTOS_Init(void);
 void startConsole(void *arg);
 void startBackgroundTask(void *arg);
 int eeprom_task_func(int arcg, char *argv[]);
-int ipmi_request_task_func(int argc, char *argv[]);
 int adc_task_func(int argc, char *argv[]);
 
 /* USER CODE END PFP */
@@ -122,11 +119,6 @@ int main(void)
         .task_name = "eeprom",
         .task_desc = "read or write eeprom to 0x00"};
 
-    Task_t ipmi_request_task = {
-        .task_func = ipmi_request_task_func,
-        .task_name = "request",
-        .task_desc = "request 0x82 in ipmb"};
-
     Task_t adc_task = {
         .task_func = adc_task_func,
         .task_name = "adc",
@@ -140,7 +132,7 @@ int main(void)
     init_bmc();
     /* 注册测试任务 */
     console_task_register(&eeprom_task);
-    console_task_register(&ipmi_request_task);
+    // console_task_register(&ipmi_request_task);
     console_task_register(&adc_task);
 
     /* 获取串口访问互斥量实例 */
@@ -264,33 +256,6 @@ int eeprom_task_func(int arcg, char *argv[])
 
     /* 与eeprom交互完成, 开启监听 */
     HAL_I2C_EnableListen_IT(&hi2c1);
-
-    return 1;
-}
-
-/***
- * @brief ipmi request task 函数, 用于测试ipmb上的信息交互
- * @param argc [int]    参数数量
- * @param argv [char*]  参数列表
- * @return [int]        任务运行结果
- */
-int ipmi_request_task_func(int argc, char *argv[])
-{
-    uint16_t data_len;
-    uint8_t* res_data;
-
-    res_data = ipmi_get_device_ID(0x82, &data_len);
-    if (res_data == NULL)
-        PRINTF("request send error\r\n");
-    else {
-        PRINTF("data len: %d", data_len);
-        for (uint16_t i = 0; i < data_len; i++)
-            PRINTF(" 0x%02x ", res_data[i]);
-        
-        PRINTF("\r\n");
-
-        free(res_data);
-    }
 
     return 1;
 }
