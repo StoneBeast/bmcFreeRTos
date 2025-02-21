@@ -132,7 +132,6 @@ int main(void)
     init_bmc();
     /* 注册测试任务 */
     console_task_register(&eeprom_task);
-    // console_task_register(&ipmi_request_task);
     console_task_register(&adc_task);
 
     /* 获取串口访问互斥量实例 */
