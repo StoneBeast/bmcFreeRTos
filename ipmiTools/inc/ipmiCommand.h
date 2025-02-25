@@ -20,6 +20,17 @@
 #define CMD_GET_MANDATORY_SENDOR_NUMBER ((unsigned short)0x2C44)
 #define CMD_GET_DEVICE_SDR_INFO         ((unsigned short)0x0420)
 #define CMD_GET_DEVICE_SDR              ((unsigned short)0x0421)
+#define CMD_RESERVE_SDR_REPOSITORY      ((unsigned short)0x0422)
+#define CMD_GET_SENSOR_READING          ((unsigned short)0x042D)
+
+#define IS_IPMI_CMD(cmd)                ((cmd == CMD_GET_DEVICE_ID)               ||  \
+                                         (cmd == CMD_SEND_MESSAGE)                ||  \
+                                         (cmd == CMD_GET_VSO_CAP)                 ||  \
+                                         (cmd == CMD_GET_MANDATORY_SENDOR_NUMBER) ||  \
+                                         (cmd == CMD_GET_DEVICE_SDR_INFO)         ||  \
+                                         (cmd == CMD_GET_DEVICE_SDR)              ||  \
+                                         (cmd == CMD_RESERVE_SDR_REPOSITORY)      ||  \
+                                         (cmd == CMD_GET_SENSOR_READING))
 
 #define CMD(NetFn_CMD)                  ((unsigned char)NetFn_CMD)
 #define NetFn(NetFn_CMD)                ((unsigned char)(NetFn_CMD >> 8))
