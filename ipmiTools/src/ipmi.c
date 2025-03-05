@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-24 15:47:12
+ * @LastEditTime : 2025-03-05 18:06:44
  * @Description  : ipmi功能实现
  */
 
@@ -17,6 +17,7 @@
 #include "uartConsole.h"
 #include "console.h"
 #include "cmsis_os.h"
+#include "ipmiSDR.h"
 
 //  TODO: 释放rqSeq功能
 
@@ -36,6 +37,9 @@ static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
 uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static int read_sensor_task_func(int argc, char* argv[]);
+static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
+static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
+static int get_sensor_list_task_func(int argc, char* argv[]);
 
 /*** 
  * @brief 获取本地地址
@@ -296,6 +300,12 @@ uint8_t init_bmc(void)
         .task_desc = "task for read 0x82 adc ch0"
     };
 
+    Task_t get_sensor_list_task = {
+        .task_func = get_sensor_list_task_func,
+        .task_name = "sensor",
+        .task_desc = "sensor <ipmi addr>"
+    };
+
     if (!init_ipmb())
         return 0;
 
@@ -307,6 +317,7 @@ uint8_t init_bmc(void)
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
     console_task_register(&sensor_read_task);
+    console_task_register(&get_sensor_list_task);
     console_backgroung_task_register(&req_timeout_task);
     console_backgroung_task_register(&res_handle_task);
 
@@ -612,4 +623,118 @@ static int read_sensor_task_func(int argc, char* argv[])
     PRINTF("\r\n read: %fv\r\n", v);
 
     return 1;
+}
+
+static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* res_len)
+{
+    uint8_t req_ret;
+    uint8_t req_data[GET_SDR_REQ_LEN];
+    BaseType_t recv_ret;
+    ipmb_recv_t temp_recv;
+    uint8_t* p_res_data;
+
+    req_data[0] = 0;
+    req_data[1] = 0;
+    req_data[2] = (uint8_t)(record_id & 0x00FF);
+    req_data[3] = (uint8_t)((record_id & 0xFF00) >> 8);
+    req_data[4] = 0;
+    req_data[5] = 0xff;
+
+    req_ret = ipmi_request(ipmi_addr, CMD_GET_DEVICE_SDR, req_data, GET_SDR_REQ_LEN);
+    if (!req_ret)
+        return NULL;
+
+    recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+
+    if (recv_ret == pdFALSE) /* 接收失败 */
+        return NULL;
+
+    *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
+    p_res_data = malloc(*res_len);
+
+    memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
+
+    return p_res_data;
+}
+
+static uint8_t* get_device_sdr_info(uint8_t ipmi_addr)
+{
+    uint8_t req_ret = 0;
+    BaseType_t recv_ret;
+    ipmb_recv_t temp_recv;
+    uint8_t* p_ret_data;
+
+    req_ret = ipmi_request(ipmi_addr, CMD_GET_DEVICE_SDR_INFO, NULL, 0);
+    if (!req_ret)
+        return NULL;
+
+    recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+
+    if (recv_ret == pdFALSE) /* 接收失败 */
+        return NULL;
+
+    p_ret_data = malloc(GET_SDR_INFO_RES_LEN);
+    memcpy(p_ret_data, (temp_recv.msg)+RESPONSE_DATA_START, GET_SDR_INFO_RES_LEN);
+
+    return p_ret_data;
+}
+
+static int get_sensor_list_task_func(int argc, char* argv[])
+{
+    uint8_t ipmi_addr;
+    char* temp_p = NULL;
+    uint8_t* sdr_info;
+    uint8_t sensor_num = 0;
+    uint8_t sdr_data_len;
+    uint8_t* temp_res_data;
+    char* temp_name;
+    uint8_t temp_name_len = 0;
+    uint16_t next_id = 0;
+
+    if (argc != 2) {
+        PRINTF("wrong parameters\r\n");
+        PRINTF("Usage: tsensor [ipmi addr]\r\n");
+        return -1;
+    }
+
+    ipmi_addr = strtoul(argv[1], &temp_p, 0);
+
+    sdr_info = get_device_sdr_info(ipmi_addr);
+    if (sdr_info == NULL)
+        return -1;
+
+    sensor_num = sdr_info[0];
+
+    if (sensor_num == 0) {
+        PRINTF("No Sensor in 0x%02x\r\n", ipmi_addr);
+        return 1;
+    }
+
+    PRINTF("------------------ Sensor List ------------------\r\n\r\n");
+    PRINTF("Entity ID\tAddr\tNO.\tType\tValue\tName\r\n\r\n");
+
+    do
+    {
+        temp_res_data = get_device_sdr(ipmi_addr, next_id, &sdr_data_len);
+
+        next_id = ((uint16_t*)temp_res_data)[0];
+        temp_name_len = temp_res_data[2+SDR_ID_SRT_TYPE_LEN_OFFSET];
+        temp_name = malloc(temp_name_len + 1);
+        memset(temp_name, 0, temp_name_len + 1);
+        memcpy(temp_name, &(temp_res_data[2+SDR_ID_STR_BYTE_OFFSET]), temp_name_len);
+
+        PRINTF("0x%02x\t0x%02x\t%02d\t0x%02x\t----\t%s\r\n", temp_res_data[2+SDR_ENTITY_ID_OFFSET],
+                                                             temp_res_data[2+SDR_SENSOR_OWNER_ID_OFFSET],
+                                                             temp_res_data[2+SDR_SENSOR_NUMBER_OFFSET],
+                                                             temp_res_data[2+SDR_SENSOR_TYPE_OFFSET],
+                                                             temp_name);
+
+        free(temp_name);
+        free(temp_res_data);
+    } while (0 != next_id);
+    
+    PRINTF("\r\n");
+
+    return 1;
+
 }
