@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-20 15:42:00
+ * @LastEditTime : 2025-03-05 10:37:44
  * @Description  : main.c
  */
 
@@ -246,10 +246,9 @@ int eeprom_task_func(int arcg, char *argv[])
     if (argv[1][0] == 'w') /* 如果第[1]个参数的第一个字符为 'w'则为写模式 */
     {
         data[1] = (uint8_t)(atoi(argv[2]));
-        HAL_I2C_Master_Transmit(&hi2c1, 0xa0, data, 2, 100);
+        HAL_I2C_Mem_Write(&hi2c1, 0xa0, 0x00, 1, &(data[1]), 1, 100);
     } else {
-        HAL_I2C_Master_Transmit(&hi2c1, 0xa0, data, 1, 100);
-        HAL_I2C_Master_Receive(&hi2c1, 0xa1, &temp_data, 1, 100);
+        HAL_I2C_Mem_Read(&hi2c1, 0xa0, 0x00, 1, &temp_data, 1, 100);
         PRINTF("read: 0x%02x\r\n", temp_data);
     }
 
