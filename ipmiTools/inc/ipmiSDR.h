@@ -101,4 +101,7 @@
 #define GET_SDR_INFO_RES_LEN                6
 #define GET_SDR_REQ_LEN                     6
 
+float reading_date_conversion(unsigned char* sdr_start_units1);
+char* get_val_str(unsigned char* sdr_start_units1);
+
 #endif // !__IPMI_SDR_H

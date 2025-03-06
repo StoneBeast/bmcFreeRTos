@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-05 18:06:44
+ * @LastEditTime : 2025-03-06 15:00:36
  * @Description  : ipmi功能实现
  */
 
@@ -690,6 +690,7 @@ static int get_sensor_list_task_func(int argc, char* argv[])
     char* temp_name;
     uint8_t temp_name_len = 0;
     uint16_t next_id = 0;
+    char* temp_val_str;
 
     if (argc != 2) {
         PRINTF("wrong parameters\r\n");
@@ -711,7 +712,7 @@ static int get_sensor_list_task_func(int argc, char* argv[])
     }
 
     PRINTF("------------------ Sensor List ------------------\r\n\r\n");
-    PRINTF("Entity ID\tAddr\tNO.\tType\tValue\tName\r\n\r\n");
+    PRINTF("Entity ID\tAddr\tNO.\tType\tValue\t\tName\r\n\r\n");
 
     do
     {
@@ -722,13 +723,15 @@ static int get_sensor_list_task_func(int argc, char* argv[])
         temp_name = malloc(temp_name_len + 1);
         memset(temp_name, 0, temp_name_len + 1);
         memcpy(temp_name, &(temp_res_data[2+SDR_ID_STR_BYTE_OFFSET]), temp_name_len);
+        temp_val_str = get_val_str(&temp_res_data[2+SDR_SENSOR_UNITS_1_OFFSET]);
 
-        PRINTF("0x%02x\t0x%02x\t%02d\t0x%02x\t----\t%s\r\n", temp_res_data[2+SDR_ENTITY_ID_OFFSET],
-                                                             temp_res_data[2+SDR_SENSOR_OWNER_ID_OFFSET],
-                                                             temp_res_data[2+SDR_SENSOR_NUMBER_OFFSET],
-                                                             temp_res_data[2+SDR_SENSOR_TYPE_OFFSET],
-                                                             temp_name);
-
+        PRINTF("0x%02x\t\t0x%02x\t%02d\t0x%02x\t%s\t\t%s\r\n",  temp_res_data[2+SDR_ENTITY_ID_OFFSET],
+                                                                temp_res_data[2+SDR_SENSOR_OWNER_ID_OFFSET],
+                                                                temp_res_data[2+SDR_SENSOR_NUMBER_OFFSET],
+                                                                temp_res_data[2+SDR_SENSOR_TYPE_OFFSET],
+                                                                temp_val_str,
+                                                                temp_name);
+        free(temp_val_str);
         free(temp_name);
         free(temp_res_data);
     } while (0 != next_id);
