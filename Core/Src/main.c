@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-18 15:49:14
+ * @LastEditTime : 2025-03-05 10:37:44
  * @Description  : main.c
  */
 
@@ -59,7 +59,6 @@
 StackType_t bg_Stack[1024];     /* bgTask静态栈 */
 StaticTask_t bg_TaskBuffer;     /* bgTask buffer */
 SemaphoreHandle_t uart_mutex;   /* uart访问互斥量 */
-extern QueueHandle_t res_queue; /* 消息队列句柄, 用于接收返回信息 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -70,7 +69,6 @@ void MX_FREERTOS_Init(void);
 void startConsole(void *arg);
 void startBackgroundTask(void *arg);
 int eeprom_task_func(int arcg, char *argv[]);
-int ipmi_request_task_func(int argc, char *argv[]);
 int adc_task_func(int argc, char *argv[]);
 
 /* USER CODE END PFP */
@@ -121,11 +119,6 @@ int main(void)
         .task_name = "eeprom",
         .task_desc = "read or write eeprom to 0x00"};
 
-    Task_t ipmi_request_task = {
-        .task_func = ipmi_request_task_func,
-        .task_name = "request",
-        .task_desc = "request 0x82 in ipmb"};
-
     Task_t adc_task = {
         .task_func = adc_task_func,
         .task_name = "adc",
@@ -139,7 +132,6 @@ int main(void)
     init_bmc();
     /* 注册测试任务 */
     console_task_register(&eeprom_task);
-    console_task_register(&ipmi_request_task);
     console_task_register(&adc_task);
 
     /* 获取串口访问互斥量实例 */
@@ -254,44 +246,14 @@ int eeprom_task_func(int arcg, char *argv[])
     if (argv[1][0] == 'w') /* 如果第[1]个参数的第一个字符为 'w'则为写模式 */
     {
         data[1] = (uint8_t)(atoi(argv[2]));
-        HAL_I2C_Master_Transmit(&hi2c1, 0xa0, data, 2, 100);
+        HAL_I2C_Mem_Write(&hi2c1, 0xa0, 0x00, 1, &(data[1]), 1, 100);
     } else {
-        HAL_I2C_Master_Transmit(&hi2c1, 0xa0, data, 1, 100);
-        HAL_I2C_Master_Receive(&hi2c1, 0xa1, &temp_data, 1, 100);
+        HAL_I2C_Mem_Read(&hi2c1, 0xa0, 0x00, 1, &temp_data, 1, 100);
         PRINTF("read: 0x%02x\r\n", temp_data);
     }
 
     /* 与eeprom交互完成, 开启监听 */
     HAL_I2C_EnableListen_IT(&hi2c1);
-
-    return 1;
-}
-
-/***
- * @brief ipmi request task 函数, 用于测试ipmb上的信息交互
- * @param argc [int]    参数数量
- * @param argv [char*]  参数列表
- * @return [int]        任务运行结果
- */
-int ipmi_request_task_func(int argc, char *argv[])
-{
-    uint8_t req_ret = 0;
-    uint8_t data[]  = {0x55, 0xAA};
-    ipmb_recv_t recv; /* 用于接收返回结果 */
-
-    /* 临时提升task优先级，防止信息传输时发生任务切换 */
-    vTaskPrioritySet(NULL, 5);
-    req_ret = ipmi_request(0x82, CMD_GET_DEVICE_ID, data, 2);
-    /* 恢复优先级 */
-    vTaskPrioritySet(NULL, 1);
-    if (req_ret) /* 数据发送成功 */
-    {
-        PRINTF("request send success\r\n");
-        /* 通过消息队列等待并接收response */
-        xQueueReceive(res_queue, &recv, portMAX_DELAY);
-        PRINTF("data: 0x%02x 0x%02x\r\n", recv.msg[7], recv.msg[8]);
-    } else
-        PRINTF("request send error\r\n");
 
     return 1;
 }

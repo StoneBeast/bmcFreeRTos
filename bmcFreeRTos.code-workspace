@@ -25,7 +25,8 @@
             "editor.tabSize": 4,
             "editor.autoIndent": "advanced"
         },
-        "makefile.configureOnOpen": false
+        "makefile.configureOnOpen": false,
+        "files.autoSave": "afterDelay"
     },
     "extensions": {
         "recommendations": [

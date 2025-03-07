@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-13 16:41:00
+ * @LastEditTime : 2025-02-20 13:54:28
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -35,6 +35,17 @@ uint8_t __USER_IMPLEMENTATION send_i2c_msg(uint8_t* msg, uint16_t len)
     /* send i2c msg */
 
     HAL_I2C_DisableListen_IT(&hi2c1);
+
+    /* 避免busy被错位置高导致总线锁死 */
+    if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) == SET)
+    {
+        HAL_Delay(5);
+        if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) == SET)
+        {
+            HAL_I2C_DeInit(&hi2c1);
+            HAL_I2C_Init(&hi2c1);
+        }
+    }
 
     HAL_StatusTypeDef ret = HAL_I2C_Master_Transmit(&hi2c1, msg[0], msg+1, len-1, 100);
     HAL_I2C_EnableListen_IT(&hi2c1);

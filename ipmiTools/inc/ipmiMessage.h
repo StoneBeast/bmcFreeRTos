@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #define MSG_MAX_LEN     64
+#define RES_MSG_MAX_LEN 72
 
 typedef struct ipmi_msg_t
 {
@@ -36,7 +37,7 @@ typedef struct
 
 typedef struct 
 {
-    uint8_t msg[64];
+    uint8_t msg[RES_MSG_MAX_LEN];
     uint16_t msg_len;
 }ipmb_recv_t;
 

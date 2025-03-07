@@ -14,10 +14,6 @@
 
 #define __USER_IMPLEMENTATION
 
-// typedef unsigned char uint8_t;
-// typedef unsigned short uint16_t;
-// typedef unsigned int uint32_t;
-
 unsigned char __USER_IMPLEMENTATION read_GA_Pin(void);
 void __USER_IMPLEMENTATION init_ipmb_i2c(uint8_t local_addr);
 uint8_t __USER_IMPLEMENTATION send_i2c_msg(uint8_t* msg, uint16_t len);
