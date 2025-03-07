@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-06 14:53:30
+ * @LastEditTime : 2025-03-07 16:07:38
  * @Description  : SDR相关操作函数
  */
 
@@ -103,5 +103,3 @@ char* get_val_str(uint8_t* sdr_start_units1)
 
     return ret_str;
 }
-
-//TODO: 数据转换，单位匹配

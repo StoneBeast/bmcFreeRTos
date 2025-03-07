@@ -19,7 +19,6 @@
 uint8_t init_bmc(void);
 uint16_t get_ipmc_status(void);
 #else
-uint8_t init_ipmc(void);
 #endif // !IS_BMC
 
 uint8_t ipmi_request(uint8_t rs_sa, uint16_t NetFn_CMD, uint8_t* data, uint16_t data_len);

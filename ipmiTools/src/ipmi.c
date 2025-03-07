@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-07 15:34:20
+ * @LastEditTime : 2025-03-07 16:05:43
  * @Description  : ipmi功能实现
  */
 
@@ -36,7 +36,6 @@ SemaphoreHandle_t i2c_mutex;
 static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
 uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
-static int read_sensor_task_func(int argc, char* argv[]);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
 static int get_sensor_list_task_func(int argc, char* argv[]);
@@ -294,12 +293,6 @@ uint8_t init_bmc(void)
         .task_desc = "info <addr> display device info"
     };
 
-    Task_t sensor_read_task = {
-        .task_func = read_sensor_task_func,
-        .task_name = "read_sensor",
-        .task_desc = "task for read 0x82 adc ch0"
-    };
-
     Task_t get_sensor_list_task = {
         .task_func = get_sensor_list_task_func,
         .task_name = "sensor",
@@ -316,7 +309,6 @@ uint8_t init_bmc(void)
     ipmi_res_manager = link_list_manager_get();
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
-    console_task_register(&sensor_read_task);
     console_task_register(&get_sensor_list_task);
     console_backgroung_task_register(&req_timeout_task);
     console_backgroung_task_register(&res_handle_task);
@@ -593,34 +585,6 @@ static int info_device(int argc, char* argv[])
 
         free(res_fru);
     }
-
-    return 1;
-}
-
-static int read_sensor_task_func(int argc, char* argv[])
-{
-    uint8_t req_data = 0x01;
-    uint8_t req_ret;
-    BaseType_t recv_ret;
-    ipmb_recv_t temp_recv;
-    uint16_t temp_data;
-    float v;
-
-    req_ret = ipmi_request(0x82, CMD_GET_SENSOR_READING, &req_data, 1);
-    if (!req_ret)
-        return -1;
-
-    recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
-
-    if (recv_ret == pdFALSE) /* 接收失败 */
-        return -1;
-
-    temp_data = temp_recv.msg[RESPONSE_DATA_START];
-    temp_data <<= 4;
-
-    v = ((float)temp_data) / 4096 * 3.3;
-
-    PRINTF("\r\n read: %fv\r\n", v);
 
     return 1;
 }
