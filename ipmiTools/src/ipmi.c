@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-06 15:00:36
+ * @LastEditTime : 2025-03-07 15:34:20
  * @Description  : ipmi功能实现
  */
 
@@ -711,8 +711,8 @@ static int get_sensor_list_task_func(int argc, char* argv[])
         return 1;
     }
 
-    PRINTF("------------------ Sensor List ------------------\r\n\r\n");
-    PRINTF("Entity ID\tAddr\tNO.\tType\tValue\t\tName\r\n\r\n");
+    PRINTF("------------------ Sensor List ------------------\r\n");
+    PRINTF("%-9s%-10s%-10s%-11s%-10s%s\r\n\r\n", "NO.", "Addr", "Type", "Value", "Name", "Entity ID");
 
     do
     {
@@ -725,12 +725,17 @@ static int get_sensor_list_task_func(int argc, char* argv[])
         memcpy(temp_name, &(temp_res_data[2+SDR_ID_STR_BYTE_OFFSET]), temp_name_len);
         temp_val_str = get_val_str(&temp_res_data[2+SDR_SENSOR_UNITS_1_OFFSET]);
 
-        PRINTF("0x%02x\t\t0x%02x\t%02d\t0x%02x\t%s\t\t%s\r\n",  temp_res_data[2+SDR_ENTITY_ID_OFFSET],
-                                                                temp_res_data[2+SDR_SENSOR_OWNER_ID_OFFSET],
-                                                                temp_res_data[2+SDR_SENSOR_NUMBER_OFFSET],
-                                                                temp_res_data[2+SDR_SENSOR_TYPE_OFFSET],
-                                                                temp_val_str,
-                                                                temp_name);
+        osThreadYield();
+        PRINTF("%02d\t%1s0x%02x\t%3s0x%02x\t%5s%s\t%s\t%2s0x%02x\r\n",  temp_res_data[2+SDR_SENSOR_NUMBER_OFFSET],
+                                                                        " ",
+                                                                        temp_res_data[2+SDR_SENSOR_OWNER_ID_OFFSET],
+                                                                        " ",
+                                                                        temp_res_data[2+SDR_SENSOR_TYPE_OFFSET],
+                                                                        " ",
+                                                                        temp_val_str,
+                                                                        temp_name,
+                                                                        " ",
+                                                                        temp_res_data[2+SDR_ENTITY_ID_OFFSET]);
         free(temp_val_str);
         free(temp_name);
         free(temp_res_data);
