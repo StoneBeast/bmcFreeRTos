@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-07 16:05:43
+ * @LastEditTime : 2025-03-07 16:55:09
  * @Description  : ipmi功能实现
  */
 
@@ -21,17 +21,16 @@
 
 //  TODO: 释放rqSeq功能
 
-uint8_t g_local_addr = 0x00;
-uint8_t re_seq_arr[64] = {0};
-uint8_t g_ipmb_msg[64] = {0};
-uint16_t g_ipmb_msg_len = 0;
-uint8_t timeout_seq[16] = {0};
-uint8_t timeout_seq_count= 0; 
-link_list_manager* ipmi_request_manager;
-link_list_manager* timeout_request_manager;
-link_list_manager* ipmi_res_manager;
-QueueHandle_t res_queue;
-SemaphoreHandle_t i2c_mutex; 
+uint8_t g_local_addr = 0x00;                    /* 本机地址 */
+uint8_t re_seq_arr[64] = {0};                   /* req seq占用状态记录 */
+uint8_t g_ipmb_msg[64] = {0};                   /* ipmb消息接收数组 */
+uint16_t g_ipmb_msg_len = 0;                    /* ipmb消息接收长度 */
+uint8_t timeout_seq[16] = {0};                  /* 记录超时请求seq */
+uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
+link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
+link_list_manager* timeout_request_manager;     /* 管理超时请求的链表 */
+link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
+QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
 
 static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
@@ -303,7 +302,6 @@ uint8_t init_bmc(void)
         return 0;
 
     init_sensor();
-    i2c_mutex = xSemaphoreCreateMutex();
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
@@ -589,6 +587,13 @@ static int info_device(int argc, char* argv[])
     return 1;
 }
 
+/*** 
+ * @brief 获取目标设备的指定sdr记录
+ * @param ipmi_addr [uint8_t]       目标设备ipmb地址
+ * @param record_id [uint16_t]      指定sdr id
+ * @param res_len[out] [uint8_t*]   获取的sdr长度 
+ * @return [uint8_t*]               [free]指向sdr数据的指针
+ */
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* res_len)
 {
     uint8_t req_ret;
@@ -597,6 +602,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     ipmb_recv_t temp_recv;
     uint8_t* p_res_data;
 
+    /* 编辑请求数据，可以在请求数据中设置偏移以及希望读取的长度，暂未提供修改 */
     req_data[0] = 0;
     req_data[1] = 0;
     req_data[2] = (uint8_t)(record_id & 0x00FF);
@@ -621,6 +627,11 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     return p_res_data;
 }
 
+/*** 
+ * @brief 获取目标设备的sdr信息
+ * @param ipmi_addr [uint8_t]   目标设备的ipmb地址  
+ * @return [uint8_t*]           [free]指向sdr info的指针
+ */
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr)
 {
     uint8_t req_ret = 0;
@@ -643,6 +654,12 @@ static uint8_t* get_device_sdr_info(uint8_t ipmi_addr)
     return p_ret_data;
 }
 
+/*** 
+ * @brief 获取，处理并打印出目标设备传感器信息
+ * @param argc [int]    参数个数
+ * @param argv [char*]  参数列表
+ * @return [int]        执行结束状态
+ */
 static int get_sensor_list_task_func(int argc, char* argv[])
 {
     uint8_t ipmi_addr;

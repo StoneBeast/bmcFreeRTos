@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-07 16:07:38
+ * @LastEditTime : 2025-03-07 17:57:55
  * @Description  : SDR相关操作函数
  */
 
@@ -14,6 +14,11 @@
 #include <math.h>
 #include <stdio.h>
 
+/*** 
+ * @brief 返回单位
+ * @param unit_code [uint8_t]   单位代码
+ * @return [char*]              [free]单位字符串
+ */
 static char* get_unit(uint8_t unit_code)
 {
     char* ret_unit;
@@ -38,6 +43,12 @@ static char* get_unit(uint8_t unit_code)
     return ret_unit;
 }
 
+/*** 
+ * @brief 从2byte字节的数据中获取M、B等参数
+ * @param byte_L [uint8_t]  低位字节
+ * @param byte_H [uint8_t]  高位字节
+ * @return [short]          目标值    
+ */
 static short get_M_B(uint8_t byte_L, uint8_t byte_H)
 {
     // 1. 提取高2位
@@ -57,6 +68,11 @@ static short get_M_B(uint8_t byte_L, uint8_t byte_H)
     return m_short;
 }
 
+/*** 
+ * @brief 转换数据
+ * @param sdr_start_units1 [uint8_t*]   从unit1字节开始的type01的sdr数据
+ * @return [float]                      转换后的数据
+ */
 float reading_date_conversion(uint8_t* sdr_start_units1)
 {
     short M, B, k1, k2;
@@ -67,6 +83,7 @@ float reading_date_conversion(uint8_t* sdr_start_units1)
     M = get_M_B(sdr_start_units1[4], sdr_start_units1[5]);
     B = get_M_B(sdr_start_units1[6], sdr_start_units1[7]);
 
+    /* 提取k1\k2参数 */
     temp_k = (sdr_start_units1[9] & 0x0F);
     if (temp_k & 0x08) {
         /* 负数 */
@@ -91,6 +108,11 @@ float reading_date_conversion(uint8_t* sdr_start_units1)
     return data;
 }
 
+/*** 
+ * @brief 获取将转换后的数据与单位组合后的字符串
+ * @param sdr_start_units1 [uint8_t*]   从unit1字节开始的type01的sdr数据
+ * @return [char*]                      [free]指向数据的指针
+ */
 char* get_val_str(uint8_t* sdr_start_units1)
 {
     char* ret_str = malloc(10);
