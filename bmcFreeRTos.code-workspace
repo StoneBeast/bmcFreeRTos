@@ -26,7 +26,8 @@
             "editor.autoIndent": "advanced"
         },
         "makefile.configureOnOpen": false,
-        "files.autoSave": "afterDelay"
+        "files.autoSave": "afterDelay",
+        "cortex-debug.variableUseNaturalFormat": false
     },
     "extensions": {
         "recommendations": [

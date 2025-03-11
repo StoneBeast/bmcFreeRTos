@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-05 10:37:44
+ * @LastEditTime : 2025-03-11 18:02:36
  * @Description  : main.c
  */
 
@@ -37,7 +37,11 @@
 #include "console.h"
 #include "bmc.h"
 #include <stdlib.h>
+#include "logStore.h"
 /* USER CODE END Includes */
+
+//TODO: 使用通过外部链接将PRINTF 以及console_printf链接到uartConsole.h的方法暴露PRINTF
+
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
@@ -56,9 +60,13 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-StackType_t bg_Stack[1024];     /* bgTask静态栈 */
+StackType_t bg_Stack[768];     /* bgTask静态栈 */
+StackType_t c_Stack[1024*2];     /* bgTask静态栈 */
 StaticTask_t bg_TaskBuffer;     /* bgTask buffer */
+StaticTask_t c_TaskBuffer;     /* bgTask buffer */
 SemaphoreHandle_t uart_mutex;   /* uart访问互斥量 */
+
+extern uint8_t fs_flag;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -130,6 +138,12 @@ int main(void)
     init_console_task();
     /* 初始化bmc */
     init_bmc();
+
+    init_logStore_hardware();
+    mount_fs();
+
+    register_fs_ops();
+
     /* 注册测试任务 */
     console_task_register(&eeprom_task);
     console_task_register(&adc_task);
@@ -138,8 +152,8 @@ int main(void)
     uart_mutex = xSemaphoreCreateMutex();
 
     /* 分别创建uartConsole任务以及后台任务轮询程序, 由于空间分配问题, 后者采用静态创建的方式 */
-    xTaskCreate(startConsole, "uartConsole", 512, NULL, 1, NULL);
-    xTaskCreateStatic(startBackgroundTask, "bgTask", 1024, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    xTaskCreateStatic(startConsole, "uartConsole", 1024*2, NULL, 1, c_Stack, &c_TaskBuffer);
+    xTaskCreateStatic(startBackgroundTask, "bgTask", 768, NULL, 1, bg_Stack, &bg_TaskBuffer);
 
     /* USER CODE END 2 */
 
@@ -212,6 +226,11 @@ void SystemClock_Config(void)
  */
 void startConsole(void *arg)
 {
+    if (fs_flag)
+        PRINTF("mount fs success\r\n");
+    else
+        PRINTF("mount fs failed\r\n");
+
     /* 启动uartConsole */
     console_start();
 }
@@ -270,15 +289,15 @@ int adc_task_func(int argc, char *argv[])
     uint16_t p_adc_data[10] = {0};  /* 存放转换后的数据 */
 
     /* 开启转换，并使用dma传输 */
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)p_adc_data, 8);
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)p_adc_data, 4);
 
     /* 判断读取的通道数 */
     if (argc == 1)
         PRINTF("adc c0: %f\r\n", ((float)p_adc_data[0]) / 4096 * 3.3);
     else {
         ch_count = atoi(argv[1]);
-        if (ch_count > 8)
-            ch_count = 8;
+        if (ch_count > 4)
+            ch_count = 4;
 
         for (int i = 0; i < ch_count; ++i) {
             PRINTF("adc c%d: %f\r\n", i, ((float)p_adc_data[i]) / 4096 * 3.3);
