@@ -3,7 +3,7 @@
  * @Date         : 2025-01-22 10:41:13
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-17 17:08:58
+ * @LastEditTime : 2025-03-11 18:22:25
  * @Description  : 实现任务管理
  */
 
@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include "uartConsoleTask.h"
 #include "hardware.h"
-#include "uartConsole.h"
 
 static void free_argv(int argc, char **argv);
 

@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-07 16:55:09
+ * @LastEditTime : 2025-03-11 18:26:17
  * @Description  : ipmi功能实现
  */
 
@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include "link_list.h"
 #include "uartConsole.h"
-#include "console.h"
 #include "cmsis_os.h"
 #include "ipmiSDR.h"
 

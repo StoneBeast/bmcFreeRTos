@@ -3,7 +3,7 @@
  * @Date         : 2025-03-10 16:28:57
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-11 18:04:53
+ * @LastEditTime : 2025-03-11 18:26:31
  * @Description  : 
  */
 
@@ -15,7 +15,6 @@
 #include "uartConsole.h"
 #include <stdlib.h>
 #include <string.h>
-#include "console.h"
 
 #define FS_CHECK()  if(0 == fs_flag) {                          \
                         PRINTF("file system not mounted\r\n");  \

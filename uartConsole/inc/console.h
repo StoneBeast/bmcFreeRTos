@@ -3,7 +3,7 @@
  * @Date         : 2025-01-21 16:25:53
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-01-24 14:12:54
+ * @LastEditTime : 2025-03-11 18:23:43
  * @Description  : 存放一些终端操作定义
  */
 
@@ -11,6 +11,7 @@
 #define __CONSOLE_H
 
 #include "link_list.h"
+#include "uartConsoleTask.h"
 
 #define BUFFER_LEN              256
 
@@ -70,9 +71,11 @@ typedef struct
     uint8_t delete_flag;                /* 删除标志 */
 }console_struct;
 
-void console_printf(const char *fmt, ...);
-
 extern link_list_manager* g_console_task_list;  /* 全局task链表 */
 extern link_list_manager* g_console_bg_task_list;   /* 全局后台task链表 */
+
+void console_printf(const char *fmt, ...);
+void console_task_register(Task_t* task);
+void console_backgroung_task_register(Bg_task_t* task);
 
 #endif // !__CONSOLE_H

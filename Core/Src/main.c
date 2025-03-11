@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-11 18:02:36
+ * @LastEditTime : 2025-03-11 18:28:16
  * @Description  : main.c
  */
 
@@ -34,13 +34,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "uartConsole.h"
-#include "console.h"
 #include "bmc.h"
 #include <stdlib.h>
 #include "logStore.h"
 /* USER CODE END Includes */
-
-//TODO: 使用通过外部链接将PRINTF 以及console_printf链接到uartConsole.h的方法暴露PRINTF
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */

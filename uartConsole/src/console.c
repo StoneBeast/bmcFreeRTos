@@ -13,7 +13,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include "link_list.h"
-#include "uartConsoleTask.h"
 #include <stdlib.h>
 #include "cmsis_os.h"
 
