@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 10:12:30
+ * @LastEditTime : 2025-03-12 10:49:26
  * @Description  : ipmi功能实现
  */
 
@@ -74,6 +74,7 @@ static uint8_t init_sensor(void)
 {
     /* 初始化adc */
     init_adc();
+    init_inter_bus();
     return 1;
 }
 

@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-20 13:54:28
+ * @LastEditTime : 2025-03-12 10:26:49
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -11,6 +11,7 @@
 #include "adc.h"
 #include "dma.h"
 #include "ipmiHardware.h"
+#include "ipmiConfig.h"
 
 extern uint8_t add_msg_list(uint8_t* msg, uint16_t len);
 
@@ -62,6 +63,55 @@ void __USER_IMPLEMENTATION init_adc(void)
     /* init sensor */
     MX_DMA_Init();
     MX_ADC1_Init();
+}
+
+void __USER_IMPLEMENTATION init_inter_bus(void)
+{
+    MX_I2C2_Init();
+}
+
+uint8_t __USER_IMPLEMENTATION read_flash(uint16_t addr, uint8_t read_len, uint8_t* data)
+{
+    HAL_StatusTypeDef read_ret;
+
+    /* 避免busy被错位置高导致总线锁死 */
+    if (__HAL_I2C_GET_FLAG(&hi2c2, I2C_FLAG_BUSY) == SET)
+    {
+        HAL_Delay(2);
+        if (__HAL_I2C_GET_FLAG(&hi2c2, I2C_FLAG_BUSY) == SET)
+        {
+            HAL_I2C_DeInit(&hi2c2);
+            HAL_I2C_Init(&hi2c2);
+        }
+    }
+
+    read_ret = HAL_I2C_Mem_Read(&hi2c2, FLASH_ADDR_PADDR(addr), addr, 1, data, read_len, 100);
+    if (read_ret != HAL_OK)
+        return 0;
+
+    return 1;
+}
+
+uint8_t __USER_IMPLEMENTATION write_flash(uint16_t addr, uint8_t write_len, uint8_t* data)
+{
+    HAL_StatusTypeDef write_ret;
+
+    /* 避免busy被错位置高导致总线锁死 */
+    if (__HAL_I2C_GET_FLAG(&hi2c2, I2C_FLAG_BUSY) == SET)
+    {
+        HAL_Delay(2);
+        if (__HAL_I2C_GET_FLAG(&hi2c2, I2C_FLAG_BUSY) == SET)
+        {
+            HAL_I2C_DeInit(&hi2c2);
+            HAL_I2C_Init(&hi2c2);
+        }
+    }
+
+    write_ret = HAL_I2C_Mem_Write(&hi2c2, FLASH_ADDR_PADDR(addr), addr, 1, data, write_len, 100);
+    if (write_ret != HAL_OK)
+        return 0;
+
+    return 1;
 }
 
 uint32_t __USER_IMPLEMENTATION get_sys_ticks(void)

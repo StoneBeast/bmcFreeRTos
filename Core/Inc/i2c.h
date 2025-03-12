@@ -33,6 +33,7 @@ extern "C" {
 /* USER CODE END Includes */
 
 extern I2C_HandleTypeDef hi2c1;
+extern I2C_HandleTypeDef hi2c2;
 
 /* USER CODE BEGIN Private defines */
 #if 0
@@ -43,6 +44,7 @@ void MX_I2C1_Init(void);
 /* USER CODE BEGIN Prototypes */
 #endif //!0
 void MX_I2C1_Init(uint8_t addr);
+void MX_I2C2_Init(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

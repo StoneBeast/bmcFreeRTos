@@ -8,5 +8,7 @@
 #endif // DEBUG
 
 #define SLOT_COUNT 8
+#define FLASH_I2C_BASS_ADDR 0x50
+#define FLASH_ADDR_PADDR(w_addr)    ((uint8_t)((FLASH_I2C_BASS_ADDR|((w_addr>>8) & 0x0007))<<1))
 
 #endif // !__IPMI_CONFIG_H
