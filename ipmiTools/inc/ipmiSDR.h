@@ -1,6 +1,8 @@
 #ifndef __IPMI_SDR_H
 #define __IPMI_SDR_H
 
+#include "ipmiConfig.h"
+
 /* SDR Header */
 #define SDR_HEADER_OFFSET                   0x00
 #define SDR_RECORD_ID_OFFSET                0x00
@@ -101,6 +103,19 @@
 #define GET_SDR_INFO_RES_LEN                6
 #define GET_SDR_REQ_LEN                     6
 
+typedef struct {
+    unsigned short id;
+    unsigned short addr;
+    unsigned char len;
+    unsigned char sensor_num;
+}sdr_index_t;
+
+typedef struct{
+    sdr_index_t info[SDR_MAX_COUNT];
+    unsigned char sdr_count;
+}sdr_index_info_t;
+
+unsigned char index_sdr(sdr_index_info_t* sdr_info);
 float reading_date_conversion(unsigned char* sdr_start_units1);
 char* get_val_str(unsigned char* sdr_start_units1);
 

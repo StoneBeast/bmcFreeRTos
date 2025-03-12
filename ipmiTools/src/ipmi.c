@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 10:49:26
+ * @LastEditTime : 2025-03-12 14:04:49
  * @Description  : ipmi功能实现
  */
 
@@ -21,6 +21,7 @@
 //  TODO: 释放rqSeq功能
 
 fru_t g_fru;
+sdr_index_info_t g_sdr_index;
 uint8_t g_local_addr = 0x00;                    /* 本机地址 */
 uint8_t re_seq_arr[64] = {0};                   /* req seq占用状态记录 */
 uint8_t g_ipmb_msg[64] = {0};                   /* ipmb消息接收数组 */
@@ -305,6 +306,7 @@ uint8_t init_bmc(void)
 
     init_sensor();
     get_fru_info();
+    index_sdr(&g_sdr_index);
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
@@ -612,28 +614,59 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     BaseType_t recv_ret;
     ipmb_recv_t temp_recv;
     uint8_t* p_res_data;
+    uint8_t target_sdr_index = 0x00;
+    uint16_t start_addr;
 
-    /* 编辑请求数据，可以在请求数据中设置偏移以及希望读取的长度，暂未提供修改 */
-    req_data[0] = 0;
-    req_data[1] = 0;
-    req_data[2] = (uint8_t)(record_id & 0x00FF);
-    req_data[3] = (uint8_t)((record_id & 0xFF00) >> 8);
-    req_data[4] = 0;
-    req_data[5] = 0xff;
+    if (ipmi_addr != g_local_addr)
+    {
+        /* 编辑请求数据，可以在请求数据中设置偏移以及希望读取的长度，暂未提供修改 */
+        req_data[0] = 0;
+        req_data[1] = 0;
+        req_data[2] = (uint8_t)(record_id & 0x00FF);
+        req_data[3] = (uint8_t)((record_id & 0xFF00) >> 8);
+        req_data[4] = 0;
+        req_data[5] = 0xff;
+    
+        req_ret = ipmi_request(ipmi_addr, CMD_GET_DEVICE_SDR, req_data, GET_SDR_REQ_LEN);
+        if (!req_ret)
+            return NULL;
+    
+        recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+    
+        if (recv_ret == pdFALSE) /* 接收失败 */
+            return NULL;
+    
+        *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
+        p_res_data = malloc(*res_len);
+    
+        memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
+    }
+    else
+    {
+        if (record_id == 0x0000)
+            target_sdr_index = 0;
+        else {
+            for (uint8_t i = 0; i < g_sdr_index.sdr_count; i++)
+            {
+                if(record_id == g_sdr_index.info[i].id) {
+                    target_sdr_index = i;
+                    break;
+                }
+            }
+        }
 
-    req_ret = ipmi_request(ipmi_addr, CMD_GET_DEVICE_SDR, req_data, GET_SDR_REQ_LEN);
-    if (!req_ret)
-        return NULL;
+        start_addr = g_sdr_index.info[target_sdr_index].addr;
+        *res_len = 2 + (g_sdr_index.info)[target_sdr_index].len;
 
-    recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+        p_res_data = malloc(*res_len);
 
-    if (recv_ret == pdFALSE) /* 接收失败 */
-        return NULL;
+        if (target_sdr_index == (g_sdr_index.sdr_count - 1))
+            ((uint16_t*)(p_res_data))[0] = 0x0000;
+        else
+            ((uint16_t*)(p_res_data))[0] = g_sdr_index.info[target_sdr_index+1].id;
 
-    *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
-    p_res_data = malloc(*res_len);
-
-    memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
+        read_flash(start_addr, ((*res_len)-2), &(p_res_data[2]));
+    }
 
     return p_res_data;
 }
@@ -692,11 +725,16 @@ static int get_sensor_list_task_func(int argc, char* argv[])
 
     ipmi_addr = strtoul(argv[1], &temp_p, 0);
 
-    sdr_info = get_device_sdr_info(ipmi_addr);
-    if (sdr_info == NULL)
-        return -1;
+    if (ipmi_addr == g_local_addr) 
+        sensor_num = g_sdr_index.sdr_count;
 
-    sensor_num = sdr_info[0];
+    else {
+        sdr_info = get_device_sdr_info(ipmi_addr);
+        if (sdr_info == NULL)
+            return -1;
+    
+        sensor_num = sdr_info[0];
+    }
 
     if (sensor_num == 0) {
         PRINTF("No Sensor in 0x%02x\r\n", ipmi_addr);

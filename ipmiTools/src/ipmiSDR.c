@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-07 17:57:55
+ * @LastEditTime : 2025-03-12 14:08:04
  * @Description  : SDR相关操作函数
  */
 
@@ -13,6 +13,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
+#include "ipmiHardware.h"
 
 /*** 
  * @brief 返回单位
@@ -124,4 +125,38 @@ char* get_val_str(uint8_t* sdr_start_units1)
     free(unit);
 
     return ret_str;
+}
+
+uint8_t index_sdr(sdr_index_info_t* sdr_info)
+{
+    uint16_t start_addr = 0x0000;
+    uint16_t temp_id;
+    uint8_t temp_len;
+    uint8_t temp_sensor_num;
+    uint8_t sdr_head[SDR_HEADER_LEN];
+
+    sdr_info->sdr_count = 0;
+
+    while (read_flash(start_addr, SDR_HEADER_LEN, sdr_head))
+    {
+        temp_id = ((uint16_t*)(sdr_head))[SDR_RECORD_ID_OFFSET];
+        temp_len = sdr_head[SDR_RECORD_LEN_OFFSET] + SDR_HEADER_LEN;
+        temp_sensor_num = sdr_head[SDR_SENSOR_NUMBER_OFFSET];
+
+        if (temp_id == 0x00 || temp_id > 0x0A)
+            return 1;
+
+        (sdr_info->info[sdr_info->sdr_count]).addr = start_addr;
+        (sdr_info->info[sdr_info->sdr_count]).id = temp_id;
+        (sdr_info->info[sdr_info->sdr_count]).sensor_num = temp_sensor_num;
+        
+        (sdr_info->info[sdr_info->sdr_count]).len = temp_len;
+        sdr_info->sdr_count++;
+
+        /* 更换为at26c16,则需按照16对齐 */
+        start_addr += temp_len;
+        start_addr = ((start_addr+15)&(~(0x000F)));
+
+    }
+    return 0;
 }
