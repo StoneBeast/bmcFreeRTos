@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-11 18:28:16
+ * @LastEditTime : 2025-03-12 10:55:20
  * @Description  : main.c
  */
 
@@ -37,6 +37,7 @@
 #include "bmc.h"
 #include <stdlib.h>
 #include "logStore.h"
+#include "ipmiHardware.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -253,23 +254,33 @@ void startBackgroundTask(void *arg)
  */
 int eeprom_task_func(int arcg, char *argv[])
 {
-    uint8_t data[2]   = {0x00};
-    uint8_t temp_data = 0;
+    uint8_t data[64]   = {0};
+    uint8_t i = 0;
+    uint8_t ret;
 
     /* 失能i2c监听，准备发送 */
-    HAL_I2C_DisableListen_IT(&hi2c1);
+    // HAL_I2C_DisableListen_IT(&hi2c2);
 
     if (argv[1][0] == 'w') /* 如果第[1]个参数的第一个字符为 'w'则为写模式 */
     {
         data[1] = (uint8_t)(atoi(argv[2]));
-        HAL_I2C_Mem_Write(&hi2c1, 0xa0, 0x00, 1, &(data[1]), 1, 100);
+        write_flash(0x00, 1, data);
     } else {
-        HAL_I2C_Mem_Read(&hi2c1, 0xa0, 0x00, 1, &temp_data, 1, 100);
-        PRINTF("read: 0x%02x\r\n", temp_data);
+        ret = read_flash(0x00, 64, data);
+        if (ret)
+        {
+            PRINTF("read: \r\n");
+            while(i < 64) {
+                PRINTF(" 0x%02x ", data[i++]);
+                if ((i != 0) && ((i % 16) == 0))
+                    PRINTF("\r\n");
+            }
+        }
+        PRINTF("\r\n");
     }
 
     /* 与eeprom交互完成, 开启监听 */
-    HAL_I2C_EnableListen_IT(&hi2c1);
+    // HAL_I2C_EnableListen_IT(&hi2c2);
 
     return 1;
 }
