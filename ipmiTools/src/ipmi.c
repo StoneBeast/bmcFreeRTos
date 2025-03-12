@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-11 18:26:17
+ * @LastEditTime : 2025-03-12 10:12:30
  * @Description  : ipmi功能实现
  */
 
@@ -20,6 +20,7 @@
 
 //  TODO: 释放rqSeq功能
 
+fru_t g_fru;
 uint8_t g_local_addr = 0x00;                    /* 本机地址 */
 uint8_t re_seq_arr[64] = {0};                   /* req seq占用状态记录 */
 uint8_t g_ipmb_msg[64] = {0};                   /* ipmb消息接收数组 */
@@ -33,6 +34,7 @@ QueueHandle_t res_queue;                        /* 将相应信息从接收task�
 
 static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
+static void get_fru_info(void);
 uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
@@ -301,6 +303,7 @@ uint8_t init_bmc(void)
         return 0;
 
     init_sensor();
+    get_fru_info();
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
@@ -464,6 +467,9 @@ static int scan_device(int argc, char* argv[])
     PRINTF("=================== Device List ===================\r\n");
     PRINTF("Slot\tIPMB Addr\tDevice Name\t\r\n");
 
+    /* 本机信息 */
+    PRINTF("%-4s\t0x%-8x\t%s\r\n", "----", g_local_addr, "local");
+
     /* 插槽数量事先设定 */
     for (i = 0; i < SLOT_COUNT; i++)
     {
@@ -524,14 +530,18 @@ static int info_device(int argc, char* argv[])
 
     /* 判断地址合法性 */
     ipmb_addr = strtoul(argv[1], &temp_p, 0);
-    if (!ASSERENT_VPX_IPMB_ADDR(ipmb_addr))
+    if ((!ASSERENT_VPX_IPMB_ADDR(ipmb_addr)) && (ipmb_addr != g_local_addr))
     {
         PRINTF("addr invalid\r\n");
         return -1;
     }
 
     /* 获取设备信息 */
-    res_fru = ipmi_get_device_ID(ipmb_addr);
+    if (ipmb_addr == g_local_addr)
+        res_fru = &g_fru;
+    else
+        res_fru = ipmi_get_device_ID(ipmb_addr);
+
     if (res_fru == NULL)
         PRINTF("request send error\r\n");
     else {  /* 打印信息 */
@@ -580,7 +590,8 @@ static int info_device(int argc, char* argv[])
                ((uint8_t*)(&(res_fru->aux_firmware_rev)))[3]
               );
 
-        free(res_fru);
+        if (ipmb_addr != g_local_addr)
+            free(res_fru);
     }
 
     return 1;
@@ -725,4 +736,21 @@ static int get_sensor_list_task_func(int argc, char* argv[])
 
     return 1;
 
+}
+
+static void get_fru_info(void)
+{
+    g_fru.ipmb_addr = g_local_addr;
+    g_fru.hard_addr = (g_local_addr>>1);
+    g_fru.slot = 0;
+    strcpy(g_fru.device_name, DEVICE_NAME);
+    g_fru.device_id = DEVICE_ID;
+    g_fru.prodect_id = PRODUCT_ID;
+    g_fru.device_rev = DEVICE_REVISION;
+    g_fru.firmware_rev_maj = FIRMWARE_REVISION_MAJOR;
+    g_fru.firmware_rev_min = FIRMWARE_REVISION_MINOR;
+    g_fru.ipmi_ver = IPMI_VERSION;
+    g_fru.additional = ADDITIONAL;
+    g_fru.manuf_id = MANUFACTURER_ID;
+    g_fru.aux_firmware_rev = AUXILIARY_FIRMWARE_REV;
 }
