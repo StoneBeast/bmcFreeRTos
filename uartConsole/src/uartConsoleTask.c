@@ -188,7 +188,8 @@ static void task_timeout_handler(void* task_handle)
 {
     Bg_task_t* bg_task = (Bg_task_t*)task_handle;
     if ((G_TICKS >= bg_task->time_until) &&
-        ((G_TICKS - 10) <= bg_task->time_until))
+        ((G_TICKS - 25) <= bg_task->time_until))
+        // TODO: 为了程序顺利执行放弃了时效性，增大容差，后续可考虑弃用该机制，通过freertos重构以保证时效性
     {
         bg_task->task.task_func(0, NULL);
         bg_task->time_until = bg_task->time_interval + G_TICKS;

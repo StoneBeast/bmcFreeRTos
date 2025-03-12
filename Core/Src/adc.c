@@ -26,6 +26,7 @@
 
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
+volatile uint8_t g_adc_conv_flag = 0;
 
 /* ADC1 init function */
 void MX_ADC1_Init(void)
@@ -172,5 +173,9 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 }
 
 /* USER CODE BEGIN 1 */
-
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+  g_adc_conv_flag = 1;
+  HAL_ADC_Stop_DMA(hadc);
+}
 /* USER CODE END 1 */

@@ -26,7 +26,7 @@
 #define CONSOLE_TIMEBASE_HANDLER SysTick_Handler
 
 #define TASK_NAME_LEN           32
-#define TASK_DESC_LEN           256
+#define TASK_DESC_LEN           128
 
 #define USE_PRIVATE_TICKS       0
 

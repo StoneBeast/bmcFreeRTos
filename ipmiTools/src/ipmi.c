@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 14:04:49
+ * @LastEditTime : 2025-03-12 14:30:34
  * @Description  : ipmi功能实现
  */
 
@@ -40,6 +40,7 @@ uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
 static int get_sensor_list_task_func(int argc, char* argv[]);
+static int update_sensor_data_task_func(int argc, char* argv[]);
 
 /*** 
  * @brief 获取本地地址
@@ -282,6 +283,16 @@ uint8_t init_bmc(void)
         .time_until = 0,
     };
 
+    Bg_task_t update_sensor_task = {
+        .task = {
+            .task_func = update_sensor_data_task_func,
+            .task_name = "update_sensor",
+            .task_desc = "update sensor"
+        },
+        .time_interval = 5003,
+        .time_until = 0,
+    };
+
     /* 添加主动任务 */
     Task_t scan_device_task = {
         .task_func = scan_device,
@@ -315,6 +326,7 @@ uint8_t init_bmc(void)
     console_task_register(&get_sensor_list_task);
     console_backgroung_task_register(&req_timeout_task);
     console_backgroung_task_register(&res_handle_task);
+    console_backgroung_task_register(&update_sensor_task);
 
     res_queue = xQueueCreate(5, sizeof(ipmb_recv_t));
 
@@ -792,4 +804,21 @@ static void get_fru_info(void)
     g_fru.additional = ADDITIONAL;
     g_fru.manuf_id = MANUFACTURER_ID;
     g_fru.aux_firmware_rev = AUXILIARY_FIRMWARE_REV;
+}
+
+static int update_sensor_data_task_func(int argc, char* argv[])
+{
+    uint8_t data1, data2, data3, data4;
+
+    data1 = read_sdr1_sensor_data();
+    data2 = read_sdr2_sensor_data();
+    data3 = read_sdr3_sensor_data();
+    data4 = read_sdr4_sensor_data();
+
+    write_flash((g_sdr_index.info[0].addr)+SDR_NORMAL_READING_OFFSET, 1, &data1);
+    write_flash((g_sdr_index.info[1].addr)+SDR_NORMAL_READING_OFFSET, 1, &data2);
+    write_flash((g_sdr_index.info[2].addr)+SDR_NORMAL_READING_OFFSET, 1, &data3);
+    write_flash((g_sdr_index.info[3].addr)+SDR_NORMAL_READING_OFFSET, 1, &data4);
+
+    return 1;
 }

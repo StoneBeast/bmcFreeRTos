@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 10:26:49
+ * @LastEditTime : 2025-03-12 14:26:41
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -19,6 +19,8 @@ volatile uint8_t adc_complete_flag = 0;
 extern unsigned char g_ipmb_msg[64];
 extern unsigned short g_ipmb_msg_len;
 extern unsigned char g_local_addr;
+extern volatile uint8_t g_adc_conv_flag;
+uint16_t adc_data[6] = {0};
 
 unsigned char __USER_IMPLEMENTATION read_GA_Pin(void)
 {
@@ -117,6 +119,34 @@ uint8_t __USER_IMPLEMENTATION write_flash(uint16_t addr, uint8_t write_len, uint
 uint32_t __USER_IMPLEMENTATION get_sys_ticks(void)
 {
     return HAL_GetTick();
+}
+
+static void __USER_IMPLEMENTATION read_adc()
+{
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_data, 4);
+    while (0 == g_adc_conv_flag);
+    g_adc_conv_flag = 0;
+}
+
+uint8_t __USER_IMPLEMENTATION read_sdr1_sensor_data(void)
+{
+    read_adc();
+    return adc_data[0]>>4;
+}
+
+uint8_t __USER_IMPLEMENTATION read_sdr2_sensor_data(void)
+{
+    return adc_data[1]>>4;
+}
+
+uint8_t __USER_IMPLEMENTATION read_sdr3_sensor_data(void)
+{
+    return adc_data[2]>>4;
+}
+
+uint8_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void)
+{
+    return adc_data[3]>>4;
 }
 
 // 侦听完成回调函数（完成一次完整的i2c通信以后会进入该函数）
