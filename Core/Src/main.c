@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-13 10:14:28
+ * @LastEditTime : 2025-03-13 18:46:01
  * @Description  : 
  */
 /*** 
@@ -53,7 +53,6 @@
 //TODO: 使用vTaskDelay替换阻塞延时
 //TODO: RAM瓶颈！
 //TODO: 测试usart3接收
-//TODO: 将目前使用的spi外设修改为规定的spi
 //TODO: 创建单一FIL实例，并考察sram占用情况
 //TODO: 改用littleFS，并考察sram占用情况
 /* USER CODE END Includes */
