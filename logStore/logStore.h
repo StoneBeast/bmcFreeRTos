@@ -2,7 +2,7 @@
 #define __LOG_STORE_H
 
 #define SPI_CS_GPIO_Port    GPIOB
-#define SPI_CS_Pin          GPIO_PIN_8
+#define SPI_CS_Pin          GPIO_PIN_12
 
 #if 0
 #define RX_BUFFER_MAX_LEN       2560

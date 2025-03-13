@@ -15,7 +15,7 @@
 #include "logStore.h"
 
 extern W25QXX_HandleTypeDef w25qxx;
-extern SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi2;
 static volatile DSTATUS Stat = STA_NOINIT;
 /*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */
@@ -47,7 +47,7 @@ DSTATUS disk_initialize (
 {
   UNUSED(pdrv);
 
-  if (W25QXX_Ok == w25qxx_init(&w25qxx, &hspi1, SPI_CS_GPIO_Port, SPI_CS_Pin))
+  if (W25QXX_Ok == w25qxx_init(&w25qxx, &hspi2, SPI_CS_GPIO_Port, SPI_CS_Pin))
   {
     return RES_OK;
   }

@@ -61,8 +61,8 @@ uint8_t current_buf = 0;
 
 void init_logStore_hardware(void)
 {
-    MX_SPI1_Init();
-    w25qxx_init(&w25qxx, &hspi1, SPI_CS_GPIO_Port, SPI_CS_Pin);
+    MX_SPI2_Init();
+    w25qxx_init(&w25qxx, &hspi2, SPI_CS_GPIO_Port, SPI_CS_Pin);
 
     /* init log input uart */
 }
