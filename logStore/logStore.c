@@ -3,7 +3,7 @@
  * @Date         : 2025-03-10 16:28:57
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-11 18:26:31
+ * @LastEditTime : 2025-03-12 18:10:02
  * @Description  : 
  */
 
@@ -15,6 +15,10 @@
 #include "uartConsole.h"
 #include <stdlib.h>
 #include <string.h>
+#include "usart.h"
+#include <stdio.h>
+
+//BUG: 后续在读取log时需要分段，否则会导致ram溢出
 
 #define FS_CHECK()  if(0 == fs_flag) {                          \
                         PRINTF("file system not mounted\r\n");  \
@@ -49,6 +53,12 @@ Task_t fs_opts[] = {
     {"", "", NULL}
 };
 
+uint8_t rx_buf_0[RX_BUFFER_MAX_LEN] = {0};
+uint16_t rx_buf_0_len = 0;
+uint8_t rx_buf_1[RX_BUFFER_MAX_LEN] = {0};
+uint16_t rx_buf_1_len = 0;
+uint8_t current_buf = 0;
+
 void init_logStore_hardware(void)
 {
     MX_SPI1_Init();
@@ -57,17 +67,19 @@ void init_logStore_hardware(void)
     /* init log input uart */
 }
 
-uint8_t mount_fs(void)
+uint16_t mount_fs(void)
 {
     FRESULT fs_res;
+    FIL index_file;
+    char index_str[8] = {0};
+    uint16_t index_i = 0;
+    UINT b_rw = 0;
 
     fs_res = f_mount(&fs, "", 1);
     if (fs_res != FR_OK)
     {
-        // debug_printf(DEBUG_TAG_ERROR, __LINE__, "mount fs failed once: %d", fs_res);
         if (fs_res == FR_NO_FILESYSTEM)
         {
-            // debug_printf(DEBUG_TAG_INFO, __LINE__, "no fs, will make it");
             f_unmount("");
             fs_res = f_mkfs("", &opt, work_sp, W25Q32_SECTOR_SIZE);
 
@@ -88,9 +100,30 @@ uint8_t mount_fs(void)
         }
     }
 
+    fs_res = f_open(&index_file, "index", FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
+    if (fs_res != FR_OK)
+        return 0;
+    
+    fs_res = f_read(&index_file, index_str, 4, &b_rw);
+    if (fs_res != FR_OK)
+        return 0;
+
+    if (b_rw == 0)
+        index_str[0] = '0';
+    index_i = atoi((char *)index_str);
+    index_i++;
+    sprintf(index_str, "%04d", index_i);
+
+    f_rewind(&index_file);
+    fs_res = f_write(&index_file, index_str, 4, &b_rw);
+    if (fs_res != FR_OK)
+        return 0;
+
+    f_close(&index_file);
+
     fs_flag = 1;
 
-    return 1;
+    return index_i;
 }
 
 void register_fs_ops(void)
@@ -239,7 +272,7 @@ static int fs_cat_func(int argc, char* argv[])
         return -1;
     }
 
-    PRINTF("read success: \r\n%s\r\n", r_data);
+    PRINTF("read success, %d: \r\n%s\r\n", rb, r_data);
     f_close(&new_file);
 
     return 1;
@@ -290,4 +323,25 @@ static int fs_reformat_func(int argc, char* argv[])
     }
 
     return 1;
+}
+
+void USART2_IRQHandler(void)
+{
+    uint8_t rc;
+    uint32_t isrflags = READ_REG(huart3.Instance->SR);
+
+    if ((isrflags & CONSOLE_IT_RXEN) != RESET)
+    {
+        HAL_UART_Receive(&huart3, &rc, 1, 100);
+        if (0 == current_buf) 
+        {
+            if (rx_buf_0_len < RX_BUFFER_MAX_LEN)
+                rx_buf_0[rx_buf_0_len++] = rc;
+        }
+        else
+        {
+            if (rx_buf_1_len < RX_BUFFER_MAX_LEN)
+                rx_buf_1[rx_buf_1_len++] = rc;
+        }
+    }
 }

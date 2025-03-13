@@ -3,7 +3,15 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 10:55:20
+ * @LastEditTime : 2025-03-13 10:14:28
+ * @Description  : 
+ */
+/*** 
+ * @Author       : stoneBeast
+ * @Date         : 2025-02-17 16:13:25
+ * @Encoding     : UTF-8
+ * @LastEditors  : stoneBeast
+ * @LastEditTime : 2025-03-12 18:05:11
  * @Description  : main.c
  */
 
@@ -38,6 +46,16 @@
 #include <stdlib.h>
 #include "logStore.h"
 #include "ipmiHardware.h"
+#include <string.h>
+#include <stdio.h>
+#include "ff.h"
+
+//TODO: 使用vTaskDelay替换阻塞延时
+//TODO: RAM瓶颈！
+//TODO: 测试usart3接收
+//TODO: 将目前使用的spi外设修改为规定的spi
+//TODO: 创建单一FIL实例，并考察sram占用情况
+//TODO: 改用littleFS，并考察sram占用情况
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -59,11 +77,13 @@
 
 /* USER CODE BEGIN PV */
 StackType_t bg_Stack[768];     /* bgTask静态栈 */
-StackType_t c_Stack[1024*2];     /* bgTask静态栈 */
-StaticTask_t bg_TaskBuffer;     /* bgTask buffer */
-StaticTask_t c_TaskBuffer;     /* bgTask buffer */
-SemaphoreHandle_t uart_mutex;   /* uart访问互斥量 */
+StackType_t c_Stack[1024*2];   /* consoleTask静态栈 */
+StaticTask_t bg_TaskBuffer;    /* bgTask buffer */
+StaticTask_t c_TaskBuffer;     /* consoleTask buffer */
 
+SemaphoreHandle_t uart_mutex;  /* uart访问互斥量 */
+
+uint16_t log_file_index;
 extern uint8_t fs_flag;
 /* USER CODE END PV */
 
@@ -74,8 +94,8 @@ void MX_FREERTOS_Init(void);
 
 void startConsole(void *arg);
 void startBackgroundTask(void *arg);
+void writeFile(void *arg);
 int eeprom_task_func(int arcg, char *argv[]);
-int adc_task_func(int argc, char *argv[]);
 
 /* USER CODE END PFP */
 
@@ -125,11 +145,6 @@ int main(void)
         .task_name = "eeprom",
         .task_desc = "read or write eeprom to 0x00"};
 
-    Task_t adc_task = {
-        .task_func = adc_task_func,
-        .task_name = "adc",
-        .task_desc = "adc [num], get adc data"};
-
     /* 初始化uartConsole使用到的硬件 */
     init_hardware();
     /* 初始化uartConsole中的任务以及后台任务队列 */
@@ -138,13 +153,12 @@ int main(void)
     init_bmc();
 
     init_logStore_hardware();
-    mount_fs();
+    log_file_index = mount_fs();
 
     register_fs_ops();
 
     /* 注册测试任务 */
     console_task_register(&eeprom_task);
-    console_task_register(&adc_task);
 
     /* 获取串口访问互斥量实例 */
     uart_mutex = xSemaphoreCreateMutex();
@@ -152,6 +166,8 @@ int main(void)
     /* 分别创建uartConsole任务以及后台任务轮询程序, 由于空间分配问题, 后者采用静态创建的方式 */
     xTaskCreateStatic(startConsole, "uartConsole", 1024*2, NULL, 1, c_Stack, &c_TaskBuffer);
     xTaskCreateStatic(startBackgroundTask, "bgTask", 768, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    if(log_file_index > 0)
+        xTaskCreate(writeFile, "writelog", 768, NULL, 2, NULL);
 
     /* USER CODE END 2 */
 
@@ -246,6 +262,38 @@ void startBackgroundTask(void *arg)
     }
 }
 
+void writeFile(void *arg)
+{
+    FIL* log_file;
+    char *log_name;
+    FRESULT res;
+
+    log_name = pvPortMalloc(5);
+    sprintf(log_name, "%04d", log_file_index);
+
+    // FIX: 由于内存瓶颈，这里会申请失败
+    log_file = pvPortMalloc(sizeof(FIL));
+    if (log_file == NULL)
+    {
+        PRINTF("generate FIL failed\r\n");
+        vPortFree(log_name);
+        vTaskDelete(NULL);
+    }
+    res = f_open(log_file, log_name, FA_WRITE|FA_CREATE_NEW );
+    if (res != FR_OK)
+    {
+        PRINTF("create %s failed\r\n", log_name);
+        vPortFree(log_name);
+        vTaskDelete(NULL);
+    }
+    /* 测试用 */
+    f_close(log_file);
+    vPortFree(log_name);
+    vPortFree(log_file);
+
+    vTaskDelete(NULL);
+}
+
 /***
  * @brief 测试使用eeprom task函数
  * @param arcg [int]    参数个数
@@ -281,36 +329,6 @@ int eeprom_task_func(int arcg, char *argv[])
 
     /* 与eeprom交互完成, 开启监听 */
     // HAL_I2C_EnableListen_IT(&hi2c2);
-
-    return 1;
-}
-
-/***
- * @brief 本机adc功能测试
- * @param argc [int]    参数数量
- * @param argv [char*]  参数列表
- * @return [int]        任务执行结果
- */
-int adc_task_func(int argc, char *argv[])
-{
-    int ch_count            = 0;    /* 读取的adc通道数 */
-    uint16_t p_adc_data[10] = {0};  /* 存放转换后的数据 */
-
-    /* 开启转换，并使用dma传输 */
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)p_adc_data, 4);
-
-    /* 判断读取的通道数 */
-    if (argc == 1)
-        PRINTF("adc c0: %f\r\n", ((float)p_adc_data[0]) / 4096 * 3.3);
-    else {
-        ch_count = atoi(argv[1]);
-        if (ch_count > 4)
-            ch_count = 4;
-
-        for (int i = 0; i < ch_count; ++i) {
-            PRINTF("adc c%d: %f\r\n", i, ((float)p_adc_data[i]) / 4096 * 3.3);
-        }
-    }
 
     return 1;
 }
