@@ -172,7 +172,7 @@ void console_start(void)
                     g_console.cursor++;
                     g_console.edit_buffer_changed_flag = 1;
                 }
-                else if (temp_buffer[0] == KEY_BACKSPACE && (g_console.cursor > 0))            /* 退格键 */
+                else if (((temp_buffer[0] == KEY_Win_BACKSPACE)||(temp_buffer[0] == KEY_Unix_BACKSPACE)) && (g_console.cursor > 0))            /* 退格键 */
                 {
                     memmove(g_console.edit_buffer + g_console.cursor - 1, g_console.edit_buffer + g_console.cursor, g_console.edit_len - g_console.cursor + 1);
                     g_console.edit_len--;

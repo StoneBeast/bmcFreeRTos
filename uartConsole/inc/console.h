@@ -24,7 +24,8 @@
 #define KEY_RIGHT           "\x1b\x5b\x43"      /* [right] key: 0x1b 0x5b 0x43 */
 #define KEY_LEFT            "\x1b\x5b\x44"      /* [left] key: 0x1b 0x5b 0x44 */
 #define KEY_ENTER           '\r'                /* [enter] key */
-#define KEY_BACKSPACE       '\x7f'              /* [backspace] key: 0x7f */
+#define KEY_Win_BACKSPACE   '\x7f'              /* [backspace] key: 0x7f(win) */
+#define KEY_Unix_BACKSPACE  '\x08'              /* [backspace] key: 0x08(unix) */
 #define KEY_HOME            "\x1b\x5b\x48"      /* [home] key: 0x1b 0x5b 0x48 */
 #define KEY_END             "\x1b\x5b\x46"      /* [end] key: 0x1b 0x5b 0x46 */
 #define KEY_DELETE          "\x1b\x5b\x33\x7e"  /* [delete] key: 0x1b 0x5b 0x33 0x7e */
