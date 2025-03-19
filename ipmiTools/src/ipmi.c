@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 14:30:34
+ * @LastEditTime : 2025-03-19 18:03:21
  * @Description  : ipmi功能实现
  */
 
@@ -17,6 +17,8 @@
 #include "uartConsole.h"
 #include "cmsis_os.h"
 #include "ipmiSDR.h"
+#include "ipmiEvent.h"
+#include "cmsis_os.h"
 
 //  TODO: 释放rqSeq功能
 
@@ -31,7 +33,9 @@ uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
 link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
 link_list_manager* timeout_request_manager;     /* 管理超时请求的链表 */
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
+link_list_manager* sensor_event_manager;
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
+SemaphoreHandle_t event_list_mutex;
 
 static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
@@ -41,6 +45,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* s
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
 static int get_sensor_list_task_func(int argc, char* argv[]);
 static int update_sensor_data_task_func(int argc, char* argv[]);
+static void event_handler(void* arg);
 
 /*** 
  * @brief 获取本地地址
@@ -321,6 +326,8 @@ uint8_t init_bmc(void)
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
+    sensor_event_manager = link_list_manager_get();
+    event_list_mutex = xSemaphoreCreateMutex();
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
     console_task_register(&get_sensor_list_task);
@@ -329,6 +336,7 @@ uint8_t init_bmc(void)
     console_backgroung_task_register(&update_sensor_task);
 
     res_queue = xQueueCreate(5, sizeof(ipmb_recv_t));
+    xTaskCreate(event_handler, "event", 256, NULL, 1, NULL);
 
     return g_local_addr;
 }
@@ -808,17 +816,63 @@ static void get_fru_info(void)
 
 static int update_sensor_data_task_func(int argc, char* argv[])
 {
-    uint8_t data1, data2, data3, data4;
+    uint8_t data[4];
+    uint8_t ht_data[2];
+    sensor_ev_t temp_p;
+    uint8_t temp_sdr_M[6];
+    uint8_t temp_str_len = 0;
+    uint16_t temp_id;
 
-    data1 = read_sdr1_sensor_data();
-    data2 = read_sdr2_sensor_data();
-    data3 = read_sdr3_sensor_data();
-    data4 = read_sdr4_sensor_data();
+    data[0] = read_sdr1_sensor_data();
+    data[1] = read_sdr2_sensor_data();
+    data[2] = read_sdr3_sensor_data();
+    data[3] = read_sdr4_sensor_data();
 
-    write_flash((g_sdr_index.info[0].addr)+SDR_NORMAL_READING_OFFSET, 1, &data1);
-    write_flash((g_sdr_index.info[1].addr)+SDR_NORMAL_READING_OFFSET, 1, &data2);
-    write_flash((g_sdr_index.info[2].addr)+SDR_NORMAL_READING_OFFSET, 1, &data3);
-    write_flash((g_sdr_index.info[3].addr)+SDR_NORMAL_READING_OFFSET, 1, &data4);
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &(data[i]));
+
+        read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 2, ht_data);
+        if((data[i] < ht_data[0]) || (data[i] > ht_data[1]))
+        {
+            read_flash((g_sdr_index.info[i].addr)+SDR_M_OFFSET, 6, temp_sdr_M);
+            temp_p.addr = g_local_addr;
+            temp_p.read_val = data_conversion((short)(data[i]), temp_sdr_M);
+            temp_p.max_val = data_conversion((short)(ht_data[1]), temp_sdr_M);
+            temp_p.min_val = data_conversion((short)(ht_data[0]), temp_sdr_M);
+            read_flash((g_sdr_index.info[i].addr)+SDR_SENSOR_NUMBER_OFFSET, 1, &(temp_p.sensor_no)); 
+            memset(temp_p.sensor_name, 0, 16);
+            read_flash((g_sdr_index.info[i].addr)+SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &temp_str_len);
+            read_flash((g_sdr_index.info[i].addr)+SDR_ID_STR_BYTE_OFFSET, temp_str_len, (uint8_t*)(temp_p.sensor_name));
+
+            temp_id = (((uint16_t)(temp_p.addr)) << 8) | ((uint16_t)temp_p.sensor_no);
+
+            xSemaphoreTake(event_list_mutex, portMAX_DELAY);
+            sensor_event_manager->add2list(&(sensor_event_manager->list), &temp_p, sizeof(sensor_ev_t), &temp_id, 2);
+            xSemaphoreGive(event_list_mutex);
+        }
+    }
 
     return 1;
+}
+
+static void event_handler(void* arg)
+{
+    sensor_ev_t *temp;
+    uint16_t temp_id;
+
+    while (1)
+    {
+        xSemaphoreTake(event_list_mutex, portMAX_DELAY);
+        if (sensor_event_manager->node_number != 0)
+        {
+            temp = sensor_event_manager->find_by_pos(&(sensor_event_manager->list), 0);
+            PRINTF("\r\nw: %s\tl: %f\tr: %f\tu: %f\r\n", temp->sensor_name, temp->min_val, temp->read_val, temp->max_val);
+            temp_id = (((uint16_t)(temp->addr)) << 8) | ((uint16_t)temp->sensor_no);
+            free(temp);
+            sensor_event_manager->delete_by_id(&(sensor_event_manager->list), &temp_id);
+        }
+        xSemaphoreGive(event_list_mutex);
+        vTaskDelay(50);
+    }
 }

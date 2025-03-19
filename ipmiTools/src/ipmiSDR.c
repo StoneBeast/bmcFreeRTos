@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 14:08:04
+ * @LastEditTime : 2025-03-19 18:14:22
  * @Description  : SDR相关操作函数
  */
 
@@ -14,6 +14,12 @@
 #include <math.h>
 #include <stdio.h>
 #include "ipmiHardware.h"
+#include "ipmiEvent.h"
+#include "link_list.h"
+#include "cmsis_os.h"
+
+extern link_list_manager* sensor_event_manager;
+extern SemaphoreHandle_t event_list_mutex;
 
 /*** 
  * @brief 返回单位
@@ -69,23 +75,17 @@ static short get_M_B(uint8_t byte_L, uint8_t byte_H)
     return m_short;
 }
 
-/*** 
- * @brief 转换数据
- * @param sdr_start_units1 [uint8_t*]   从unit1字节开始的type01的sdr数据
- * @return [float]                      转换后的数据
- */
-float reading_date_conversion(uint8_t* sdr_start_units1)
+float data_conversion(short data, uint8_t* sdr_start_M)
 {
     short M, B, k1, k2;
     uint8_t temp_k;
-    short raw_value;
-    float data = 0;
+    float ret_data;
 
-    M = get_M_B(sdr_start_units1[4], sdr_start_units1[5]);
-    B = get_M_B(sdr_start_units1[6], sdr_start_units1[7]);
+    M = get_M_B(sdr_start_M[0], sdr_start_M[1]);
+    B = get_M_B(sdr_start_M[2], sdr_start_M[3]);
 
     /* 提取k1\k2参数 */
-    temp_k = (sdr_start_units1[9] & 0x0F);
+    temp_k = (sdr_start_M[5] & 0x0F);
     if (temp_k & 0x08) {
         /* 负数 */
         k1 = (short)(temp_k | 0xFFF0);
@@ -93,18 +93,33 @@ float reading_date_conversion(uint8_t* sdr_start_units1)
         k1 = (short)temp_k;
     }
 
-    temp_k = ((sdr_start_units1[9]>>4) & 0x0F);
+    temp_k = ((sdr_start_M[5]>>4) & 0x0F);
     if (temp_k & 0x08) {
         /* 负数 */
         k2 = (short)(temp_k | 0xFFF0);
     } else {
         k2 = (short)temp_k;
     }
+
+    ret_data = ((data*M)+(B*powf(10, k1))) * powf(10, k2);
+
+    return ret_data;
+}
+
+/*** 
+ * @brief 转换数据
+ * @param sdr_start_units1 [uint8_t*]   从unit1字节开始的type01的sdr数据
+ * @return [float]                      转换后的数据
+ */
+float reading_date_conversion(uint8_t* sdr_start_units1)
+{
+    short raw_value;
+    float data = 0;
     
     /* 这里省略判断unit1中关于data的位的标志位，默认为无符号 */
     raw_value = (short)(sdr_start_units1[11]);
 
-    data = ((raw_value*M)+(B*powf(10, k1))) * powf(10, k2);
+    data = data_conversion(raw_value, &(sdr_start_units1[4]));
 
     return data;
 }
