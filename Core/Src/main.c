@@ -94,7 +94,6 @@ void MX_FREERTOS_Init(void);
 void startConsole(void *arg);
 void startBackgroundTask(void *arg);
 void writeFile(void *arg);
-int eeprom_task_func(int arcg, char *argv[]);
 
 /* USER CODE END PFP */
 
@@ -138,12 +137,6 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 #endif //! 0
-    /* 测试用，eeprom task、ipmi request task、本机adc task */
-    Task_t eeprom_task = {
-        .task_func = eeprom_task_func,
-        .task_name = "eeprom",
-        .task_desc = "read or write eeprom to 0x00"};
-
     /* 初始化uartConsole使用到的硬件 */
     init_hardware();
     /* 初始化uartConsole中的任务以及后台任务队列 */
@@ -155,9 +148,6 @@ int main(void)
     log_file_index = mount_fs();
 
     register_fs_ops();
-
-    /* 注册测试任务 */
-    console_task_register(&eeprom_task);
 
     /* 获取串口访问互斥量实例 */
     uart_mutex = xSemaphoreCreateMutex();
@@ -291,45 +281,6 @@ void writeFile(void *arg)
     vPortFree(log_file);
 
     vTaskDelete(NULL);
-}
-
-/***
- * @brief 测试使用eeprom task函数
- * @param arcg [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        任务执行结果
- */
-int eeprom_task_func(int arcg, char *argv[])
-{
-    uint8_t data[64]   = {0};
-    uint8_t i = 0;
-    uint8_t ret;
-
-    /* 失能i2c监听，准备发送 */
-    // HAL_I2C_DisableListen_IT(&hi2c2);
-
-    if (argv[1][0] == 'w') /* 如果第[1]个参数的第一个字符为 'w'则为写模式 */
-    {
-        data[1] = (uint8_t)(atoi(argv[2]));
-        write_flash(0x00, 1, data);
-    } else {
-        ret = read_flash(0x00, 64, data);
-        if (ret)
-        {
-            PRINTF("read: \r\n");
-            while(i < 64) {
-                PRINTF(" 0x%02x ", data[i++]);
-                if ((i != 0) && ((i % 16) == 0))
-                    PRINTF("\r\n");
-            }
-        }
-        PRINTF("\r\n");
-    }
-
-    /* 与eeprom交互完成, 开启监听 */
-    // HAL_I2C_EnableListen_IT(&hi2c2);
-
-    return 1;
 }
 
 /* USER CODE END 4 */
