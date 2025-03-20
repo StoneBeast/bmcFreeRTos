@@ -19,6 +19,7 @@
 #include "ipmiSDR.h"
 #include "ipmiEvent.h"
 #include "cmsis_os.h"
+#include "myPorth.h"
 
 //  TODO: 释放rqSeq功能
 
@@ -93,7 +94,7 @@ static uint8_t init_sensor(void)
 static uint8_t* package_ipmi_msg(const struct ipmi_msg_t* msg)
 {
     /* 这里的长度 8 计算了cmp_code */
-    uint8_t* pkg = (uint8_t*)malloc(RESPONSE_FORMAT_LEN + msg->data_len);
+    uint8_t* pkg = (uint8_t*)MALLOC(RESPONSE_FORMAT_LEN + msg->data_len);
 
     pkg[1] = ADD_LUN(msg->netfn, msg->rs_lun);
     pkg[4] = ADD_LUN(msg->rq_seq, msg->rq_lun);
@@ -375,7 +376,7 @@ uint8_t ipmi_request(uint8_t rs_sa, uint16_t NetFn_CMD, uint8_t* data, uint16_t 
                                         sizeof(ipmi_req_t), &(req.rq_seq), 1);
     }
 
-    free(msg_pkg);
+    FREE(msg_pkg);
 
     /* 返回 */
     return send_ret;
@@ -409,7 +410,7 @@ uint8_t ipmi_response(uint8_t rq_sa, uint16_t NetFn_CMD, uint8_t cmpl_code, uint
     send_ipmi_msg(msg_pkg, RESPONSE_FORMAT_LEN + resp.msg.data_len);
     /* 从请求列表中删除该请求 */
 
-    free(msg_pkg);
+    FREE(msg_pkg);
 
     /* 返回 */
     return 1;
@@ -481,7 +482,7 @@ fru_t* ipmi_get_device_ID(uint8_t dev_ipmi_addr)
         return NULL;
     }
 
-    ret_fru = malloc(sizeof(fru_t));
+    ret_fru = MALLOC(sizeof(fru_t));
     get_device_id_msg_handler(ret_fru, &(temp_recv.msg[RESPONSE_DATA_START]));
     /* 补充数据 */
     ret_fru->ipmb_addr = dev_ipmi_addr;
@@ -629,7 +630,7 @@ static int info_device(int argc, char* argv[])
               );
 
         if (ipmb_addr != g_local_addr)
-            free(res_fru);
+            FREE(res_fru);
     }
 
     return 1;
@@ -672,7 +673,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
             return NULL;
     
         *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
-        p_res_data = malloc(*res_len);
+        p_res_data = MALLOC(*res_len);
     
         memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
     }
@@ -693,7 +694,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
         start_addr = g_sdr_index.info[target_sdr_index].addr;
         *res_len = 2 + (g_sdr_index.info)[target_sdr_index].len;
 
-        p_res_data = malloc(*res_len);
+        p_res_data = MALLOC(*res_len);
 
         if (target_sdr_index == (g_sdr_index.sdr_count - 1))
             ((uint16_t*)(p_res_data))[0] = 0x0000;
@@ -727,7 +728,7 @@ static uint8_t* get_device_sdr_info(uint8_t ipmi_addr)
     if (recv_ret == pdFALSE) /* 接收失败 */
         return NULL;
 
-    p_ret_data = malloc(GET_SDR_INFO_RES_LEN);
+    p_ret_data = MALLOC(GET_SDR_INFO_RES_LEN);
     memcpy(p_ret_data, (temp_recv.msg)+RESPONSE_DATA_START, GET_SDR_INFO_RES_LEN);
 
     return p_ret_data;
@@ -785,7 +786,7 @@ static int get_sensor_list_task_func(int argc, char* argv[])
 
         next_id = ((uint16_t*)temp_res_data)[0];
         temp_name_len = temp_res_data[2+SDR_ID_SRT_TYPE_LEN_OFFSET];
-        temp_name = malloc(temp_name_len + 1);
+        temp_name = MALLOC(temp_name_len + 1);
         memset(temp_name, 0, temp_name_len + 1);
         memcpy(temp_name, &(temp_res_data[2+SDR_ID_STR_BYTE_OFFSET]), temp_name_len);
         temp_val_str = get_val_str(&temp_res_data[2+SDR_SENSOR_UNITS_1_OFFSET]);
@@ -801,9 +802,9 @@ static int get_sensor_list_task_func(int argc, char* argv[])
                                                                         temp_name,
                                                                         " ",
                                                                         temp_res_data[2+SDR_ENTITY_ID_OFFSET]);
-        free(temp_val_str);
-        free(temp_name);
-        free(temp_res_data);
+        FREE(temp_val_str);
+        FREE(temp_name);
+        FREE(temp_res_data);
     } while (0 != next_id);
     
     PRINTF("\r\n");

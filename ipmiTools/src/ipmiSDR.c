@@ -17,6 +17,7 @@
 #include "ipmiEvent.h"
 #include "link_list.h"
 #include "cmsis_os.h"
+#include "myPorth.h"
 
 extern SemaphoreHandle_t event_list_mutex;
 
@@ -28,7 +29,7 @@ extern SemaphoreHandle_t event_list_mutex;
 static char* get_unit(uint8_t unit_code)
 {
     char* ret_unit;
-    ret_unit = malloc(3);
+    ret_unit = MALLOC(3);
     switch (unit_code)
     {
     case 0x01:
@@ -41,7 +42,7 @@ static char* get_unit(uint8_t unit_code)
         strcpy(ret_unit, "A");
         break;
     default:
-        free(ret_unit);
+        FREE(ret_unit);
         ret_unit = NULL;
         break;
     }
@@ -130,13 +131,13 @@ float reading_date_conversion(uint8_t* sdr_start_units1)
  */
 char* get_val_str(uint8_t* sdr_start_units1)
 {
-    char* ret_str = malloc(10);
+    char* ret_str = MALLOC(10);
 
     float data = reading_date_conversion(sdr_start_units1);
     char *unit = get_unit(sdr_start_units1[1]);
 
     sprintf(ret_str, "%.3f %s", data, unit);
-    free(unit);
+    FREE(unit);
 
     return ret_str;
 }
@@ -147,7 +148,7 @@ uint8_t index_sdr(sdr_index_info_t* sdr_info)
     uint16_t temp_id;
     uint8_t temp_len;
     uint8_t temp_sensor_num;
-    uint8_t sdr_head[SDR_HEADER_LEN];
+    uint8_t sdr_head[SDR_HEADER_LEN+SDR_KEY_LEN];
 
     sdr_info->sdr_count = 0;
 

@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-13 18:46:01
+ * @LastEditTime : 2025-03-20 14:29:32
  * @Description  : 
  */
 /*** 
@@ -75,7 +75,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-StackType_t bg_Stack[768];     /* bgTask静态栈 */
+StackType_t bg_Stack[880];     /* bgTask静态栈 */
 StackType_t c_Stack[1024*2];   /* consoleTask静态栈 */
 StaticTask_t bg_TaskBuffer;    /* bgTask buffer */
 StaticTask_t c_TaskBuffer;     /* consoleTask buffer */
@@ -164,7 +164,7 @@ int main(void)
 
     /* 分别创建uartConsole任务以及后台任务轮询程序, 由于空间分配问题, 后者采用静态创建的方式 */
     xTaskCreateStatic(startConsole, "uartConsole", 1024*2, NULL, 1, c_Stack, &c_TaskBuffer);
-    xTaskCreateStatic(startBackgroundTask, "bgTask", 768, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
     if(log_file_index > 0)
         xTaskCreate(writeFile, "writelog", 768, NULL, 2, NULL);
 

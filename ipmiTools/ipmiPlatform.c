@@ -179,9 +179,8 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 {
 	if(hi2c->Instance == I2C1)
 	{
-	    //从机不再复位总线
-	    hi2c->Instance->CR1 = 0;   //复位PE
-   		hi2c->Instance->CR1 = 1;    //解除复位
+	    HAL_I2C_DeInit(&hi2c1);
+        HAL_I2C_Init(&hi2c1);
 	}
 }
 
