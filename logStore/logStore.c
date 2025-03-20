@@ -3,7 +3,7 @@
  * @Date         : 2025-03-10 16:28:57
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 18:10:02
+ * @LastEditTime : 2025-03-20 17:27:17
  * @Description  : 
  */
 
@@ -65,6 +65,7 @@ void init_logStore_hardware(void)
     w25qxx_init(&w25qxx, &hspi2, SPI_CS_GPIO_Port, SPI_CS_Pin);
 
     /* init log input uart */
+    MX_USART3_UART_Init();
 }
 
 uint16_t mount_fs(void)
@@ -325,7 +326,7 @@ static int fs_reformat_func(int argc, char* argv[])
     return 1;
 }
 
-void USART2_IRQHandler(void)
+void USART3_IRQHandler(void)
 {
     uint8_t rc;
     uint32_t isrflags = READ_REG(huart3.Instance->SR);
@@ -333,15 +334,16 @@ void USART2_IRQHandler(void)
     if ((isrflags & CONSOLE_IT_RXEN) != RESET)
     {
         HAL_UART_Receive(&huart3, &rc, 1, 100);
-        if (0 == current_buf) 
-        {
-            if (rx_buf_0_len < RX_BUFFER_MAX_LEN)
-                rx_buf_0[rx_buf_0_len++] = rc;
-        }
-        else
-        {
-            if (rx_buf_1_len < RX_BUFFER_MAX_LEN)
-                rx_buf_1[rx_buf_1_len++] = rc;
-        }
+        PRINTF("get 3: %c\r\n", rc);
+        // if (0 == current_buf) 
+        // {
+        //     if (rx_buf_0_len < RX_BUFFER_MAX_LEN)
+        //         rx_buf_0[rx_buf_0_len++] = rc;
+        // }
+        // else
+        // {
+        //     if (rx_buf_1_len < RX_BUFFER_MAX_LEN)
+        //         rx_buf_1[rx_buf_1_len++] = rc;
+        // }
     }
 }
