@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-19 18:03:21
+ * @LastEditTime : 2025-03-20 11:24:33
  * @Description  : ipmi功能实现
  */
 
@@ -33,8 +33,8 @@ uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
 link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
 link_list_manager* timeout_request_manager;     /* 管理超时请求的链表 */
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
-link_list_manager* sensor_event_manager;
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
+QueueHandle_t event_queue;
 SemaphoreHandle_t event_list_mutex;
 
 static int scan_device(int argc, char* argv[]);
@@ -274,7 +274,7 @@ uint8_t init_bmc(void)
             .task_name = "req_timeout",
             .task_desc = "find timeout request"
         },
-        .time_interval = 5,
+        .time_interval = 13,
         .time_until = 0,
     };
 
@@ -326,7 +326,6 @@ uint8_t init_bmc(void)
     ipmi_request_manager = link_list_manager_get();
     timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
-    sensor_event_manager = link_list_manager_get();
     event_list_mutex = xSemaphoreCreateMutex();
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
@@ -336,6 +335,7 @@ uint8_t init_bmc(void)
     console_backgroung_task_register(&update_sensor_task);
 
     res_queue = xQueueCreate(5, sizeof(ipmb_recv_t));
+    event_queue = xQueueCreate(5, sizeof(sensor_ev_t));
     xTaskCreate(event_handler, "event", 256, NULL, 1, NULL);
 
     return g_local_addr;
@@ -432,14 +432,29 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
     ipmb_recv_t recv = {
         .msg_len = len,
     };
+    sensor_ev_t temp_e;
 
     if (!check_msg(msg, len))
         return 0;
 
-    memcpy(recv.msg, msg, len);
-
-    rqSeq = ((msg[4])>>2);
-    ipmi_res_manager->add2list(&(ipmi_res_manager->list), &recv, sizeof(ipmb_recv_t), &(rqSeq), 1);
+    if (((msg[1] >> 2) == 0x3F) && (msg[5] == 0xFF))
+    {
+        temp_e.addr = msg[3];
+        temp_e.sensor_no = msg[RESPONSE_DATA_START+EVENT_BODY_SENSOR_NO_OFFSET];
+        temp_e.min_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_MIN_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
+        temp_e.read_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_READ_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
+        temp_e.max_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_MAX_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
+        memset(temp_e.sensor_name, 0, 16);
+        memcpy(temp_e.sensor_name, &(msg[RESPONSE_DATA_START+EVENT_BODY_NAME_OFFSET]), msg[RESPONSE_DATA_START+EVENT_BODY_NAME_LEN_OFFSET]);
+        xQueueSendFromISR(event_queue, &temp_e, NULL);
+    }
+    else
+    {
+        memcpy(recv.msg, msg, len);
+    
+        rqSeq = ((msg[4])>>2);
+        ipmi_res_manager->add2list(&(ipmi_res_manager->list), &recv, sizeof(ipmb_recv_t), &(rqSeq), 1);
+    }
 
     return 1;
 }
@@ -821,7 +836,6 @@ static int update_sensor_data_task_func(int argc, char* argv[])
     sensor_ev_t temp_p;
     uint8_t temp_sdr_M[6];
     uint8_t temp_str_len = 0;
-    uint16_t temp_id;
 
     data[0] = read_sdr1_sensor_data();
     data[1] = read_sdr2_sensor_data();
@@ -833,23 +847,19 @@ static int update_sensor_data_task_func(int argc, char* argv[])
         write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &(data[i]));
 
         read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 2, ht_data);
-        if((data[i] < ht_data[0]) || (data[i] > ht_data[1]))
+        if((data[i] < ht_data[1]) || (data[i] > ht_data[0]))
         {
             read_flash((g_sdr_index.info[i].addr)+SDR_M_OFFSET, 6, temp_sdr_M);
             temp_p.addr = g_local_addr;
             temp_p.read_val = data_conversion((short)(data[i]), temp_sdr_M);
-            temp_p.max_val = data_conversion((short)(ht_data[1]), temp_sdr_M);
-            temp_p.min_val = data_conversion((short)(ht_data[0]), temp_sdr_M);
+            temp_p.max_val = data_conversion((short)(ht_data[0]), temp_sdr_M);
+            temp_p.min_val = data_conversion((short)(ht_data[1]), temp_sdr_M);
             read_flash((g_sdr_index.info[i].addr)+SDR_SENSOR_NUMBER_OFFSET, 1, &(temp_p.sensor_no)); 
             memset(temp_p.sensor_name, 0, 16);
             read_flash((g_sdr_index.info[i].addr)+SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &temp_str_len);
             read_flash((g_sdr_index.info[i].addr)+SDR_ID_STR_BYTE_OFFSET, temp_str_len, (uint8_t*)(temp_p.sensor_name));
 
-            temp_id = (((uint16_t)(temp_p.addr)) << 8) | ((uint16_t)temp_p.sensor_no);
-
-            xSemaphoreTake(event_list_mutex, portMAX_DELAY);
-            sensor_event_manager->add2list(&(sensor_event_manager->list), &temp_p, sizeof(sensor_ev_t), &temp_id, 2);
-            xSemaphoreGive(event_list_mutex);
+            xQueueSend(event_queue, &temp_p, portMAX_DELAY);
         }
     }
 
@@ -858,21 +868,11 @@ static int update_sensor_data_task_func(int argc, char* argv[])
 
 static void event_handler(void* arg)
 {
-    sensor_ev_t *temp;
-    uint16_t temp_id;
+    sensor_ev_t temp;
 
     while (1)
     {
-        xSemaphoreTake(event_list_mutex, portMAX_DELAY);
-        if (sensor_event_manager->node_number != 0)
-        {
-            temp = sensor_event_manager->find_by_pos(&(sensor_event_manager->list), 0);
-            PRINTF("\r\nw: %s\tl: %f\tr: %f\tu: %f\r\n", temp->sensor_name, temp->min_val, temp->read_val, temp->max_val);
-            temp_id = (((uint16_t)(temp->addr)) << 8) | ((uint16_t)temp->sensor_no);
-            free(temp);
-            sensor_event_manager->delete_by_id(&(sensor_event_manager->list), &temp_id);
-        }
-        xSemaphoreGive(event_list_mutex);
-        vTaskDelay(50);
+        xQueueReceive(event_queue, &temp, portMAX_DELAY);
+        PRINTF("w: 0x%02x\t%s\tl: %f\tr: %f\tu: %f\r\n", temp.addr, temp.sensor_name, temp.min_val, temp.read_val, temp.max_val);
     }
 }

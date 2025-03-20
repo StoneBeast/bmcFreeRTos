@@ -18,7 +18,6 @@
 #include "link_list.h"
 #include "cmsis_os.h"
 
-extern link_list_manager* sensor_event_manager;
 extern SemaphoreHandle_t event_list_mutex;
 
 /*** 
