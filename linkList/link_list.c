@@ -3,7 +3,7 @@
  * @Date         : 2025-01-22 10:14:12
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-05 09:40:48
+ * @LastEditTime : 2025-03-20 14:05:15
  * @Description  : 通用链表管理工具
  */
 
@@ -141,6 +141,8 @@ static void link_list_delete_by_id(link_list_handle_t *list, void *id)
                 link_list *temp_node = node_p->next;
                 node_p->next = node_p->next->next;
 
+                free(temp_node->id);
+                free(temp_node->vendor_data);
                 free(temp_node);
 
                 ((link_list_manager*)list)->node_number--;
