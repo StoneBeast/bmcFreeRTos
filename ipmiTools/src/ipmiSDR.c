@@ -147,7 +147,7 @@ uint8_t index_sdr(sdr_index_info_t* sdr_info)
     uint16_t temp_id;
     uint8_t temp_len;
     uint8_t temp_sensor_num;
-    uint8_t sdr_head[SDR_HEADER_LEN];
+    uint8_t sdr_head[SDR_HEADER_LEN+SDR_KEY_LEN];
 
     sdr_info->sdr_count = 0;
 
