@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-20 11:24:33
+ * @LastEditTime : 2025-03-24 18:19:03
  * @Description  : ipmi功能实现
  */
 
@@ -31,7 +31,6 @@ uint16_t g_ipmb_msg_len = 0;                    /* ipmb消息接收长度 */
 uint8_t timeout_seq[16] = {0};                  /* 记录超时请求seq */
 uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
 link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
-link_list_manager* timeout_request_manager;     /* 管理超时请求的链表 */
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
 QueueHandle_t event_queue;
@@ -191,47 +190,6 @@ static uint8_t send_ipmi_msg(uint8_t* msg, uint16_t len)
 }
 
 /*** 
- * @brief 判断并处理待处理请求是否超时
- * @param req [void*]    当前处理的请求结构体
- * @return [void]
- */
-void req_timeout_handler(void* req)
-{
-    ipmi_req_t* temp = (ipmi_req_t*)req;
-
-    /* 超时事件设置为50ms */
-    if (temp->msg_ticks + 50 < get_sys_ticks())
-    {
-        /* 发现超时请求，则将其添加到超时请求列表中 */
-        timeout_request_manager->add2list(&(timeout_request_manager->list), temp, sizeof(ipmi_req_t),
-                                            &(temp->rq_seq), 1);
-        /* 记录超时请求的rqseq */
-        timeout_seq[timeout_seq_count++] = temp->rq_seq;
-    }
-}
-
-/*** 
- * @brief 寻找超时请求，并执行响应的处理函数
- * @param argc [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        处理结果
- */
-static int req_timeout_task_func(int argc, char* argv[])
-{
-    //TODO: 请求超时响应处理
-    ipmi_request_manager->foreach(ipmi_request_manager->list, req_timeout_handler);
-
-    /* 将超时的请求从请求列表中删除 */
-    for (uint8_t i = 0; i < timeout_seq_count; i++)
-        ipmi_request_manager->delete_by_id(&(ipmi_request_manager->list), &(timeout_seq[i]));
-
-    /* 全部处理后清空超时请求个数 */
-    timeout_seq_count = 0;
-    
-    return 1;
-}
-
-/*** 
  * @brief 处理响应任务函数
  * @param argc [int]    参数个数
  * @param argv [char*]  参数列表
@@ -268,16 +226,6 @@ static int res_handle_task_func(int argc, char* argv[])
 uint8_t init_bmc(void)
 {
     /* 添加后台任务 */
-    Bg_task_t req_timeout_task = {
-        .task = {
-            .task_func = req_timeout_task_func,
-            .task_name = "req_timeout",
-            .task_desc = "find timeout request"
-        },
-        .time_interval = 13,
-        .time_until = 0,
-    };
-
     Bg_task_t res_handle_task = {
         .task = {
             .task_func = res_handle_task_func,
@@ -324,13 +272,11 @@ uint8_t init_bmc(void)
     get_fru_info();
     index_sdr(&g_sdr_index);
     ipmi_request_manager = link_list_manager_get();
-    timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
     event_list_mutex = xSemaphoreCreateMutex();
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
     console_task_register(&get_sensor_list_task);
-    console_backgroung_task_register(&req_timeout_task);
     console_backgroung_task_register(&res_handle_task);
     console_backgroung_task_register(&update_sensor_task);
 
