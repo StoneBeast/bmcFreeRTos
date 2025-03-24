@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-24 18:19:03
+ * @LastEditTime : 2025-03-24 18:40:32
  * @Description  : ipmi功能实现
  */
 
@@ -33,8 +33,7 @@ uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
 link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
-QueueHandle_t event_queue;
-SemaphoreHandle_t event_list_mutex;
+QueueHandle_t event_queue;                      /* 事件通知队列 */
 
 static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
@@ -273,7 +272,6 @@ uint8_t init_bmc(void)
     index_sdr(&g_sdr_index);
     ipmi_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
-    event_list_mutex = xSemaphoreCreateMutex();
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
     console_task_register(&get_sensor_list_task);
@@ -758,6 +756,10 @@ static int get_sensor_list_task_func(int argc, char* argv[])
 
 }
 
+/*** 
+ * @brief 获取fru info，占位
+ * @return [void]
+ */
 static void get_fru_info(void)
 {
     g_fru.ipmb_addr = g_local_addr;
@@ -775,6 +777,12 @@ static void get_fru_info(void)
     g_fru.aux_firmware_rev = AUXILIARY_FIRMWARE_REV;
 }
 
+/*** 
+ * @brief 更新传感器数据任务函数
+ * @param argc [int]    参数个数
+ * @param argv [char*]  参数列表
+ * @return [int]        执行结果
+ */
 static int update_sensor_data_task_func(int argc, char* argv[])
 {
     uint8_t data[4];
@@ -783,6 +791,7 @@ static int update_sensor_data_task_func(int argc, char* argv[])
     uint8_t temp_sdr_M[6];
     uint8_t temp_str_len = 0;
 
+    /* 读取传感器数据 */
     data[0] = read_sdr1_sensor_data();
     data[1] = read_sdr2_sensor_data();
     data[2] = read_sdr3_sensor_data();
@@ -790,8 +799,10 @@ static int update_sensor_data_task_func(int argc, char* argv[])
 
     for (uint8_t i = 0; i < 4; i++)
     {
+        /* 向sdr更新数据 */
         write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &(data[i]));
 
+        /* 判断是否为正常数据 */
         read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 2, ht_data);
         if((data[i] < ht_data[1]) || (data[i] > ht_data[0]))
         {
@@ -805,6 +816,7 @@ static int update_sensor_data_task_func(int argc, char* argv[])
             read_flash((g_sdr_index.info[i].addr)+SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &temp_str_len);
             read_flash((g_sdr_index.info[i].addr)+SDR_ID_STR_BYTE_OFFSET, temp_str_len, (uint8_t*)(temp_p.sensor_name));
 
+            /* 上报事件 */
             xQueueSend(event_queue, &temp_p, portMAX_DELAY);
         }
     }
@@ -812,13 +824,19 @@ static int update_sensor_data_task_func(int argc, char* argv[])
     return 1;
 }
 
+/*** 
+ * @brief 事件处理任务函数
+ * @param arg [void*]    任务函数参数
+ * @return [void]
+ */
 static void event_handler(void* arg)
 {
     sensor_ev_t temp;
 
     while (1)
     {
-        xQueueReceive(event_queue, &temp, portMAX_DELAY);
-        PRINTF("w: 0x%02x\t%s\tl: %f\tr: %f\tu: %f\r\n", temp.addr, temp.sensor_name, temp.min_val, temp.read_val, temp.max_val);
+        /* 接收并处理事件数据 */
+        if (pdTRUE == xQueueReceive(event_queue, &temp, portMAX_DELAY))
+            PRINTF("w: 0x%02x\t%s\tl: %f\tr: %f\tu: %f\r\n", temp.addr, temp.sensor_name, temp.min_val, temp.read_val, temp.max_val);
     }
 }

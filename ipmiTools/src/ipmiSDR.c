@@ -18,8 +18,6 @@
 #include "link_list.h"
 #include "cmsis_os.h"
 
-extern SemaphoreHandle_t event_list_mutex;
-
 /*** 
  * @brief 返回单位
  * @param unit_code [uint8_t]   单位代码
