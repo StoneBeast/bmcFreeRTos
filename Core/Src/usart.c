@@ -126,7 +126,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     __HAL_AFIO_REMAP_USART3_PARTIAL();
 
     /* USART3 interrupt Init */
-    HAL_NVIC_SetPriority(USART3_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(USART3_IRQn, 1, 0);
     HAL_NVIC_EnableIRQ(USART3_IRQn);
   /* USER CODE BEGIN USART3_MspInit 1 */
 

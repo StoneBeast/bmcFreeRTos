@@ -73,7 +73,7 @@
           "uartConsole",
           "ipmiTools",
           "ipmiTools/inc",
-          "logStore/fatFS",
+          "logStore/littlefs",
           "logStore/w25qxDriver",
           "logStore"
         ],

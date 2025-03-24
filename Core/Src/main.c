@@ -3,15 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-20 17:58:46
- * @Description  : 
- */
-/*** 
- * @Author       : stoneBeast
- * @Date         : 2025-02-17 16:13:25
- * @Encoding     : UTF-8
- * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-12 18:05:11
+ * @LastEditTime : 2025-03-24 17:42:02
  * @Description  : main.c
  */
 
@@ -48,13 +40,9 @@
 #include "ipmiHardware.h"
 #include <string.h>
 #include <stdio.h>
-#include "ff.h"
 
 //TODO: 使用vTaskDelay替换阻塞延时
 //TODO: RAM瓶颈！
-//TODO: 测试usart3接收
-//TODO: 创建单一FIL实例，并考察sram占用情况
-//TODO: 改用littleFS，并考察sram占用情况
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -82,8 +70,6 @@ StaticTask_t c_TaskBuffer;     /* consoleTask buffer */
 
 SemaphoreHandle_t uart_mutex;  /* uart访问互斥量 */
 
-uint16_t log_file_index;
-extern uint8_t fs_flag;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,7 +80,6 @@ void MX_FREERTOS_Init(void);
 void startConsole(void *arg);
 void startBackgroundTask(void *arg);
 void writeFile(void *arg);
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -144,24 +129,14 @@ int main(void)
     /* 初始化bmc */
     init_bmc();
 
-    init_logStore_hardware();
-    log_file_index = mount_fs();
-
     register_fs_ops();
 
     /* 获取串口访问互斥量实例 */
     uart_mutex = xSemaphoreCreateMutex();
 
-    /* 分别创建uartConsole任务以及后台任务轮询程序, 由于空间分配问题, 后者采用静态创建的方式 */
-    xTaskCreateStatic(startConsole, "uartConsole", 1024*2, NULL, 1, c_Stack, &c_TaskBuffer);
-    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
-    if(log_file_index > 0)
-        xTaskCreate(writeFile, "writelog", 768, NULL, 2, NULL);
+    xTaskCreate(writeFile, "logStoage", 512, NULL, 5, NULL);
 
     /* USER CODE END 2 */
-
-    /* Call init function for freertos objects (in cmsis_os2.c) */
-    MX_FREERTOS_Init();
 
     /* Start scheduler */
     osKernelStart();
@@ -251,35 +226,72 @@ void startBackgroundTask(void *arg)
     }
 }
 
+
+/*** 
+ * @brief log记录任务函数
+ * @param arg [void*]   任务参数
+ * @return [void]
+ */
 void writeFile(void *arg)
 {
-    FIL* log_file;
-    char *log_name;
-    FRESULT res;
+    uint16_t log_file_index = 0;    /* log文件编号记录 */
+    char log_file_name[6];          /* log文件名 */
+    int f_res;                      /* fs操作结果 */
+    lfs_file_t log_file;            /* log文件实例 */
 
-    log_name = pvPortMalloc(5);
-    sprintf(log_name, "%04d", log_file_index);
+    /* 初始化该功能使用到的硬件 */
+    init_logStore_hardware();
+    /* 挂载文件系统并获取生成的log索引 */
+    log_file_index = mount_fs();
 
-    // FIX: 由于内存瓶颈，这里会申请失败
-    log_file = pvPortMalloc(sizeof(FIL));
-    if (log_file == NULL)
-    {
-        PRINTF("generate FIL failed\r\n");
-        vPortFree(log_name);
-        vTaskDelete(NULL);
+    /* 成功获取索引，且文件系统成功挂载 */
+    if (log_file_index != 0 && fs_flag == 1) {
+        sprintf(log_file_name, "%04d", log_file_index);
+
+        /* 创建并打开需要写入的log文件 */
+        f_res = lfs_file_open(&lfs, &log_file, log_file_name, LFS_O_WRONLY | LFS_O_CREAT);
+        if (f_res) {
+            PRINTF("open %s failed\r\n", log_file_name);
+        } else {
+            PRINTF("open %s success, wait start...\r\n", log_file_name);
+
+        }
+
+        /* 等待开始 */
+        while (start_flag == 0);
+        PRINTF("start\r\n");
+
+        while ((rx_buf_0_last_len != rx_buf_0_len || rx_buf_1_last_len != rx_buf_1_len) && (rx_buf_0_len + rx_buf_1_len) != 0) {
+            vTaskDelay(25/portTICK_PERIOD_MS);
+            /* 采用ping-pong buffer，接收和写入不使用同一个buffer */
+            if (current_buf == 0) {
+                current_buf       = 1;
+                rx_buf_0_last_len = rx_buf_0_len;
+                rx_buf_0_len      = 0;
+                lfs_file_write(&lfs, &log_file, rx_buf_0, rx_buf_0_last_len);
+            } else {
+                current_buf       = 0;
+                rx_buf_1_last_len = rx_buf_1_len;
+                rx_buf_1_len      = 0;
+                lfs_file_write(&lfs, &log_file, rx_buf_1, rx_buf_1_last_len);
+            }
+            vTaskDelay(25 / portTICK_PERIOD_MS);
+        }
+
+        /* 置位结束标志位 */
+        end_flag = 1;
+
+        lfs_file_close(&lfs, &log_file);
+        PRINTF("write finished\r\n");
+
+    } else {
+        PRINTF("mount fs failed\r\n");
     }
-    res = f_open(log_file, log_name, FA_WRITE|FA_CREATE_NEW );
-    if (res != FR_OK)
-    {
-        PRINTF("create %s failed\r\n", log_name);
-        vPortFree(log_name);
-        vTaskDelete(NULL);
-    }
-    /* 测试用 */
-    f_close(log_file);
-    vPortFree(log_name);
-    vPortFree(log_file);
 
+    /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
+    xTaskCreateStatic(startConsole, "uartConsole", 1024 * 2, NULL, 1, c_Stack, &c_TaskBuffer);
+    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    /* 创建接下来的任务后删除当前任务 */
     vTaskDelete(NULL);
 }
 
