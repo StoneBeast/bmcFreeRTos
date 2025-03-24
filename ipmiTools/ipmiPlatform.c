@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-20 10:49:08
+ * @LastEditTime : 2025-03-21 08:50:45
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -12,6 +12,7 @@
 #include "dma.h"
 #include "ipmiHardware.h"
 #include "ipmiConfig.h"
+#include "cmsis_os.h"
 
 extern uint8_t add_msg_list(uint8_t* msg, uint16_t len);
 
@@ -43,7 +44,7 @@ uint8_t __USER_IMPLEMENTATION send_i2c_msg(uint8_t* msg, uint16_t len)
     /* 避免busy被错位置高导致总线锁死 */
     if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) == SET)
     {
-        HAL_Delay(5);
+        vTaskDelay(15/portTICK_PERIOD_MS);
         if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) == SET)
         {
             HAL_I2C_DeInit(&hi2c1);
