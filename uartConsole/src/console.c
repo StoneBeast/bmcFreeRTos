@@ -3,7 +3,7 @@
  * @Date         : 2025-01-21 16:25:45
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-18 15:56:30
+ * @LastEditTime : 2025-03-24 16:04:34
  * @Description  : 串口终端程序的主要逻辑实现
  */
 
@@ -274,7 +274,7 @@ void CONSOLE_UART_IRQ_HANDLER(void)
 void console_printf(const char* fmt, ...)
 {
     uint16_t i = 0;
-    char *buffer = (char *)malloc(strlen(fmt) + 128);
+    char *buffer = (char *)pvPortMalloc(strlen(fmt) + 128);
 
     va_list args;
     va_start(args, fmt);
@@ -290,5 +290,5 @@ void console_printf(const char* fmt, ...)
     }
     xSemaphoreGive(uart_mutex);
 
-    free(buffer);
+    vPortFree(buffer);
 }
