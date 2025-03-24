@@ -3,7 +3,7 @@
  * @Date         : 2025-01-22 10:41:13
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-17 17:08:58
+ * @LastEditTime : 2025-03-11 18:22:25
  * @Description  : 实现任务管理
  */
 
@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include "uartConsoleTask.h"
 #include "hardware.h"
-#include "uartConsole.h"
 
 static void free_argv(int argc, char **argv);
 
@@ -188,8 +187,8 @@ int task_handler(uint8_t *submit, uint16_t submit_len)
 static void task_timeout_handler(void* task_handle)
 {
     Bg_task_t* bg_task = (Bg_task_t*)task_handle;
-    if ((G_TICKS >= bg_task->time_until) &&
-        ((G_TICKS - 10) <= bg_task->time_until))
+    if (G_TICKS >= bg_task->time_until)
+        // TODO: 为了程序顺利执行放弃了时效性，增大容差，后续可考虑弃用该机制，通过freertos重构以保证时效性
     {
         bg_task->task.task_func(0, NULL);
         bg_task->time_until = bg_task->time_interval + G_TICKS;

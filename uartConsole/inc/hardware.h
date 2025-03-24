@@ -24,7 +24,6 @@ uint8_t __USER get_console_uart_data(void);
 void __USER clear_console_uart_idel_it_flag(void);
 void __USER console_uart_send_data(uint8_t data);
 
-void __USER inc_ticks(void);
 uint32_t __USER get_ticks(void);
 
 void delay_ms(uint32_t ms);

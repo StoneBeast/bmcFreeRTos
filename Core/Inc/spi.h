@@ -1,13 +1,21 @@
+/*
+ * @Author       : stoneBeast
+ * @Date         : 2025-03-07 18:49:54
+ * @Encoding     : UTF-8
+ * @LastEditors  : stoneBeast
+ * @LastEditTime : 2025-03-13 18:29:33
+ * @Description  : 
+ */
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * @file    usart.h
+  * @file    spi.h
   * @brief   This file contains all the function prototypes for
-  *          the usart.c file
+  *          the spi.c file
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2025 STMicroelectronics.
+  * Copyright (c) 2024 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -18,8 +26,8 @@
   */
 /* USER CODE END Header */
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __USART_H__
-#define __USART_H__
+#ifndef __SPI_H__
+#define __SPI_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,15 +40,13 @@ extern "C" {
 
 /* USER CODE END Includes */
 
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart3;
+extern SPI_HandleTypeDef hspi2;
 
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
 
-void MX_USART1_UART_Init(void);
-void MX_USART3_UART_Init(void);
+void MX_SPI2_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
@@ -50,5 +56,5 @@ void MX_USART3_UART_Init(void);
 }
 #endif
 
-#endif /* __USART_H__ */
+#endif /* __SPI_H__ */
 

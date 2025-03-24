@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-05 10:37:44
+ * @LastEditTime : 2025-03-24 17:42:02
  * @Description  : main.c
  */
 
@@ -34,10 +34,17 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "uartConsole.h"
-#include "console.h"
 #include "bmc.h"
 #include <stdlib.h>
+#include "logStore.h"
+#include "ipmiHardware.h"
+#include <string.h>
+#include <stdio.h>
+
+//TODO: 使用vTaskDelay替换阻塞延时
+//TODO: RAM瓶颈！
 /* USER CODE END Includes */
+
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
@@ -56,9 +63,13 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-StackType_t bg_Stack[1024];     /* bgTask静态栈 */
-StaticTask_t bg_TaskBuffer;     /* bgTask buffer */
-SemaphoreHandle_t uart_mutex;   /* uart访问互斥量 */
+StackType_t bg_Stack[880];     /* bgTask静态栈 */
+StackType_t c_Stack[1024*2];   /* consoleTask静态栈 */
+StaticTask_t bg_TaskBuffer;    /* bgTask buffer */
+StaticTask_t c_TaskBuffer;     /* consoleTask buffer */
+
+SemaphoreHandle_t uart_mutex;  /* uart访问互斥量 */
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,9 +79,7 @@ void MX_FREERTOS_Init(void);
 
 void startConsole(void *arg);
 void startBackgroundTask(void *arg);
-int eeprom_task_func(int arcg, char *argv[]);
-int adc_task_func(int argc, char *argv[]);
-
+void writeFile(void *arg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -113,38 +122,21 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 #endif //! 0
-    /* 测试用，eeprom task、ipmi request task、本机adc task */
-    Task_t eeprom_task = {
-        .task_func = eeprom_task_func,
-        .task_name = "eeprom",
-        .task_desc = "read or write eeprom to 0x00"};
-
-    Task_t adc_task = {
-        .task_func = adc_task_func,
-        .task_name = "adc",
-        .task_desc = "adc [num], get adc data"};
-
     /* 初始化uartConsole使用到的硬件 */
     init_hardware();
     /* 初始化uartConsole中的任务以及后台任务队列 */
     init_console_task();
     /* 初始化bmc */
     init_bmc();
-    /* 注册测试任务 */
-    console_task_register(&eeprom_task);
-    console_task_register(&adc_task);
+
+    register_fs_ops();
 
     /* 获取串口访问互斥量实例 */
     uart_mutex = xSemaphoreCreateMutex();
 
-    /* 分别创建uartConsole任务以及后台任务轮询程序, 由于空间分配问题, 后者采用静态创建的方式 */
-    xTaskCreate(startConsole, "uartConsole", 512, NULL, 1, NULL);
-    xTaskCreateStatic(startBackgroundTask, "bgTask", 1024, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    xTaskCreate(writeFile, "logStoage", 512, NULL, 5, NULL);
 
     /* USER CODE END 2 */
-
-    /* Call init function for freertos objects (in cmsis_os2.c) */
-    MX_FREERTOS_Init();
 
     /* Start scheduler */
     osKernelStart();
@@ -212,6 +204,11 @@ void SystemClock_Config(void)
  */
 void startConsole(void *arg)
 {
+    if (fs_flag)
+        PRINTF("mount fs success\r\n");
+    else
+        PRINTF("mount fs failed\r\n");
+
     /* 启动uartConsole */
     console_start();
 }
@@ -229,63 +226,73 @@ void startBackgroundTask(void *arg)
     }
 }
 
-/***
- * @brief 测试使用eeprom task函数
- * @param arcg [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        任务执行结果
+
+/*** 
+ * @brief log记录任务函数
+ * @param arg [void*]   任务参数
+ * @return [void]
  */
-int eeprom_task_func(int arcg, char *argv[])
+void writeFile(void *arg)
 {
-    uint8_t data[2]   = {0x00};
-    uint8_t temp_data = 0;
+    uint16_t log_file_index = 0;    /* log文件编号记录 */
+    char log_file_name[6];          /* log文件名 */
+    int f_res;                      /* fs操作结果 */
+    lfs_file_t log_file;            /* log文件实例 */
 
-    /* 失能i2c监听，准备发送 */
-    HAL_I2C_DisableListen_IT(&hi2c1);
+    /* 初始化该功能使用到的硬件 */
+    init_logStore_hardware();
+    /* 挂载文件系统并获取生成的log索引 */
+    log_file_index = mount_fs();
 
-    if (argv[1][0] == 'w') /* 如果第[1]个参数的第一个字符为 'w'则为写模式 */
-    {
-        data[1] = (uint8_t)(atoi(argv[2]));
-        HAL_I2C_Mem_Write(&hi2c1, 0xa0, 0x00, 1, &(data[1]), 1, 100);
-    } else {
-        HAL_I2C_Mem_Read(&hi2c1, 0xa0, 0x00, 1, &temp_data, 1, 100);
-        PRINTF("read: 0x%02x\r\n", temp_data);
-    }
+    /* 成功获取索引，且文件系统成功挂载 */
+    if (log_file_index != 0 && fs_flag == 1) {
+        sprintf(log_file_name, "%04d", log_file_index);
 
-    /* 与eeprom交互完成, 开启监听 */
-    HAL_I2C_EnableListen_IT(&hi2c1);
+        /* 创建并打开需要写入的log文件 */
+        f_res = lfs_file_open(&lfs, &log_file, log_file_name, LFS_O_WRONLY | LFS_O_CREAT);
+        if (f_res) {
+            PRINTF("open %s failed\r\n", log_file_name);
+        } else {
+            PRINTF("open %s success, wait start...\r\n", log_file_name);
 
-    return 1;
-}
-
-/***
- * @brief 本机adc功能测试
- * @param argc [int]    参数数量
- * @param argv [char*]  参数列表
- * @return [int]        任务执行结果
- */
-int adc_task_func(int argc, char *argv[])
-{
-    int ch_count            = 0;    /* 读取的adc通道数 */
-    uint16_t p_adc_data[10] = {0};  /* 存放转换后的数据 */
-
-    /* 开启转换，并使用dma传输 */
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)p_adc_data, 8);
-
-    /* 判断读取的通道数 */
-    if (argc == 1)
-        PRINTF("adc c0: %f\r\n", ((float)p_adc_data[0]) / 4096 * 3.3);
-    else {
-        ch_count = atoi(argv[1]);
-        if (ch_count > 8)
-            ch_count = 8;
-
-        for (int i = 0; i < ch_count; ++i) {
-            PRINTF("adc c%d: %f\r\n", i, ((float)p_adc_data[i]) / 4096 * 3.3);
         }
+
+        /* 等待开始 */
+        while (start_flag == 0);
+        PRINTF("start\r\n");
+
+        while ((rx_buf_0_last_len != rx_buf_0_len || rx_buf_1_last_len != rx_buf_1_len) && (rx_buf_0_len + rx_buf_1_len) != 0) {
+            vTaskDelay(25/portTICK_PERIOD_MS);
+            /* 采用ping-pong buffer，接收和写入不使用同一个buffer */
+            if (current_buf == 0) {
+                current_buf       = 1;
+                rx_buf_0_last_len = rx_buf_0_len;
+                rx_buf_0_len      = 0;
+                lfs_file_write(&lfs, &log_file, rx_buf_0, rx_buf_0_last_len);
+            } else {
+                current_buf       = 0;
+                rx_buf_1_last_len = rx_buf_1_len;
+                rx_buf_1_len      = 0;
+                lfs_file_write(&lfs, &log_file, rx_buf_1, rx_buf_1_last_len);
+            }
+            vTaskDelay(25 / portTICK_PERIOD_MS);
+        }
+
+        /* 置位结束标志位 */
+        end_flag = 1;
+
+        lfs_file_close(&lfs, &log_file);
+        PRINTF("write finished\r\n");
+
+    } else {
+        PRINTF("mount fs failed\r\n");
     }
 
-    return 1;
+    /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
+    xTaskCreateStatic(startConsole, "uartConsole", 1024 * 2, NULL, 1, c_Stack, &c_TaskBuffer);
+    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    /* 创建接下来的任务后删除当前任务 */
+    vTaskDelete(NULL);
 }
 
 /* USER CODE END 4 */

@@ -12,6 +12,7 @@
 
 #include "ipmiConfig.h"
 
+#define DEVICE_NAME_MAX_LEN     16
 #define REQUEST_FORMAT_LEN      7
 #define RESPONSE_FORMAT_LEN     8
 #define RESPONSE_DATA_START     7
@@ -21,6 +22,18 @@
 #define VPX_HARDWARE_ADDR(GA)   ((unsigned char)(VPX_BASE_HARDWARE_ADDR + GA))
 #define VPX_IPMB_ADDR(ha)       ((unsigned char)(ha<<1))
 #define WAIT_RESPONSE_MAX       50
+
+#define DEVICE_NAME             "local"
+#define DEVICE_ID               ((unsigned char)0x01)
+#define PROVIDES_SDR            0X01
+#define DEVICE_REVISION         0x00
+#define FIRMWARE_REVISION_MAJOR 0X01
+#define FIRMWARE_REVISION_MINOR 0X00
+#define IPMI_VERSION            0X51
+#define ADDITIONAL              0X21
+#define MANUFACTURER_ID         ((unsigned int)(0x0FFFFF&0x00000))
+#define PRODUCT_ID              ((unsigned short)0x0000)
+#define AUXILIARY_FIRMWARE_REV  ((unsigned int)0x00000000)
 
 #define RES_DATA_LEN(msg_len)   ((uint16_t)(msg_len - RESPONSE_FORMAT_LEN))
 #define ASSERENT_VPX_HARDWARE_ADDR(addr)  ((addr >= 0x41) && (addr <= 0x5F))
@@ -42,6 +55,7 @@ typedef struct
     unsigned char slot;
     unsigned char hard_addr;
     unsigned char ipmb_addr;
+    char device_name[DEVICE_NAME_MAX_LEN];
     unsigned char device_id;
     unsigned char provides_sdr;
     unsigned char device_rev;

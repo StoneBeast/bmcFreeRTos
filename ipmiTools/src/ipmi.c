@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-07 16:55:09
+ * @LastEditTime : 2025-03-24 18:40:32
  * @Description  : ipmi功能实现
  */
 
@@ -15,12 +15,15 @@
 #include <stdlib.h>
 #include "link_list.h"
 #include "uartConsole.h"
-#include "console.h"
 #include "cmsis_os.h"
 #include "ipmiSDR.h"
+#include "ipmiEvent.h"
+#include "cmsis_os.h"
 
 //  TODO: 释放rqSeq功能
 
+fru_t g_fru;
+sdr_index_info_t g_sdr_index;
 uint8_t g_local_addr = 0x00;                    /* 本机地址 */
 uint8_t re_seq_arr[64] = {0};                   /* req seq占用状态记录 */
 uint8_t g_ipmb_msg[64] = {0};                   /* ipmb消息接收数组 */
@@ -28,16 +31,19 @@ uint16_t g_ipmb_msg_len = 0;                    /* ipmb消息接收长度 */
 uint8_t timeout_seq[16] = {0};                  /* 记录超时请求seq */
 uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
 link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
-link_list_manager* timeout_request_manager;     /* 管理超时请求的链表 */
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
+QueueHandle_t event_queue;                      /* 事件通知队列 */
 
 static int scan_device(int argc, char* argv[]);
 static int info_device(int argc, char* argv[]);
+static void get_fru_info(void);
 uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
 static int get_sensor_list_task_func(int argc, char* argv[]);
+static int update_sensor_data_task_func(int argc, char* argv[]);
+static void event_handler(void* arg);
 
 /*** 
  * @brief 获取本地地址
@@ -73,6 +79,7 @@ static uint8_t init_sensor(void)
 {
     /* 初始化adc */
     init_adc();
+    init_inter_bus();
     return 1;
 }
 
@@ -182,47 +189,6 @@ static uint8_t send_ipmi_msg(uint8_t* msg, uint16_t len)
 }
 
 /*** 
- * @brief 判断并处理待处理请求是否超时
- * @param req [void*]    当前处理的请求结构体
- * @return [void]
- */
-void req_timeout_handler(void* req)
-{
-    ipmi_req_t* temp = (ipmi_req_t*)req;
-
-    /* 超时事件设置为50ms */
-    if (temp->msg_ticks + 50 < get_sys_ticks())
-    {
-        /* 发现超时请求，则将其添加到超时请求列表中 */
-        timeout_request_manager->add2list(&(timeout_request_manager->list), temp, sizeof(ipmi_req_t),
-                                            &(temp->rq_seq), 1);
-        /* 记录超时请求的rqseq */
-        timeout_seq[timeout_seq_count++] = temp->rq_seq;
-    }
-}
-
-/*** 
- * @brief 寻找超时请求，并执行响应的处理函数
- * @param argc [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        处理结果
- */
-static int req_timeout_task_func(int argc, char* argv[])
-{
-    //TODO: 请求超时响应处理
-    ipmi_request_manager->foreach(ipmi_request_manager->list, req_timeout_handler);
-
-    /* 将超时的请求从请求列表中删除 */
-    for (uint8_t i = 0; i < timeout_seq_count; i++)
-        ipmi_request_manager->delete_by_id(&(ipmi_request_manager->list), &(timeout_seq[i]));
-
-    /* 全部处理后清空超时请求个数 */
-    timeout_seq_count = 0;
-    
-    return 1;
-}
-
-/*** 
  * @brief 处理响应任务函数
  * @param argc [int]    参数个数
  * @param argv [char*]  参数列表
@@ -259,16 +225,6 @@ static int res_handle_task_func(int argc, char* argv[])
 uint8_t init_bmc(void)
 {
     /* 添加后台任务 */
-    Bg_task_t req_timeout_task = {
-        .task = {
-            .task_func = req_timeout_task_func,
-            .task_name = "req_timeout",
-            .task_desc = "find timeout request"
-        },
-        .time_interval = 5,
-        .time_until = 0,
-    };
-
     Bg_task_t res_handle_task = {
         .task = {
             .task_func = res_handle_task_func,
@@ -276,6 +232,16 @@ uint8_t init_bmc(void)
             .task_desc = "handle response"
         },
         .time_interval = 2,
+        .time_until = 0,
+    };
+
+    Bg_task_t update_sensor_task = {
+        .task = {
+            .task_func = update_sensor_data_task_func,
+            .task_name = "update_sensor",
+            .task_desc = "update sensor"
+        },
+        .time_interval = 5003,
         .time_until = 0,
     };
 
@@ -302,16 +268,19 @@ uint8_t init_bmc(void)
         return 0;
 
     init_sensor();
+    get_fru_info();
+    index_sdr(&g_sdr_index);
     ipmi_request_manager = link_list_manager_get();
-    timeout_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
     console_task_register(&scan_device_task);
     console_task_register(&info_device_task);
     console_task_register(&get_sensor_list_task);
-    console_backgroung_task_register(&req_timeout_task);
     console_backgroung_task_register(&res_handle_task);
+    console_backgroung_task_register(&update_sensor_task);
 
     res_queue = xQueueCreate(5, sizeof(ipmb_recv_t));
+    event_queue = xQueueCreate(5, sizeof(sensor_ev_t));
+    xTaskCreate(event_handler, "event", 256, NULL, 1, NULL);
 
     return g_local_addr;
 }
@@ -407,14 +376,29 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
     ipmb_recv_t recv = {
         .msg_len = len,
     };
+    sensor_ev_t temp_e;
 
     if (!check_msg(msg, len))
         return 0;
 
-    memcpy(recv.msg, msg, len);
-
-    rqSeq = ((msg[4])>>2);
-    ipmi_res_manager->add2list(&(ipmi_res_manager->list), &recv, sizeof(ipmb_recv_t), &(rqSeq), 1);
+    if (((msg[1] >> 2) == 0x3F) && (msg[5] == 0xFF))
+    {
+        temp_e.addr = msg[3];
+        temp_e.sensor_no = msg[RESPONSE_DATA_START+EVENT_BODY_SENSOR_NO_OFFSET];
+        temp_e.min_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_MIN_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
+        temp_e.read_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_READ_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
+        temp_e.max_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_MAX_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
+        memset(temp_e.sensor_name, 0, 16);
+        memcpy(temp_e.sensor_name, &(msg[RESPONSE_DATA_START+EVENT_BODY_NAME_OFFSET]), msg[RESPONSE_DATA_START+EVENT_BODY_NAME_LEN_OFFSET]);
+        xQueueSendFromISR(event_queue, &temp_e, NULL);
+    }
+    else
+    {
+        memcpy(recv.msg, msg, len);
+    
+        rqSeq = ((msg[4])>>2);
+        ipmi_res_manager->add2list(&(ipmi_res_manager->list), &recv, sizeof(ipmb_recv_t), &(rqSeq), 1);
+    }
 
     return 1;
 }
@@ -464,6 +448,9 @@ static int scan_device(int argc, char* argv[])
 
     PRINTF("=================== Device List ===================\r\n");
     PRINTF("Slot\tIPMB Addr\tDevice Name\t\r\n");
+
+    /* 本机信息 */
+    PRINTF("%-4s\t0x%-8x\t%s\r\n", "----", g_local_addr, "local");
 
     /* 插槽数量事先设定 */
     for (i = 0; i < SLOT_COUNT; i++)
@@ -525,14 +512,18 @@ static int info_device(int argc, char* argv[])
 
     /* 判断地址合法性 */
     ipmb_addr = strtoul(argv[1], &temp_p, 0);
-    if (!ASSERENT_VPX_IPMB_ADDR(ipmb_addr))
+    if ((!ASSERENT_VPX_IPMB_ADDR(ipmb_addr)) && (ipmb_addr != g_local_addr))
     {
         PRINTF("addr invalid\r\n");
         return -1;
     }
 
     /* 获取设备信息 */
-    res_fru = ipmi_get_device_ID(ipmb_addr);
+    if (ipmb_addr == g_local_addr)
+        res_fru = &g_fru;
+    else
+        res_fru = ipmi_get_device_ID(ipmb_addr);
+
     if (res_fru == NULL)
         PRINTF("request send error\r\n");
     else {  /* 打印信息 */
@@ -581,7 +572,8 @@ static int info_device(int argc, char* argv[])
                ((uint8_t*)(&(res_fru->aux_firmware_rev)))[3]
               );
 
-        free(res_fru);
+        if (ipmb_addr != g_local_addr)
+            free(res_fru);
     }
 
     return 1;
@@ -601,28 +593,59 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     BaseType_t recv_ret;
     ipmb_recv_t temp_recv;
     uint8_t* p_res_data;
+    uint8_t target_sdr_index = 0x00;
+    uint16_t start_addr;
 
-    /* 编辑请求数据，可以在请求数据中设置偏移以及希望读取的长度，暂未提供修改 */
-    req_data[0] = 0;
-    req_data[1] = 0;
-    req_data[2] = (uint8_t)(record_id & 0x00FF);
-    req_data[3] = (uint8_t)((record_id & 0xFF00) >> 8);
-    req_data[4] = 0;
-    req_data[5] = 0xff;
+    if (ipmi_addr != g_local_addr)
+    {
+        /* 编辑请求数据，可以在请求数据中设置偏移以及希望读取的长度，暂未提供修改 */
+        req_data[0] = 0;
+        req_data[1] = 0;
+        req_data[2] = (uint8_t)(record_id & 0x00FF);
+        req_data[3] = (uint8_t)((record_id & 0xFF00) >> 8);
+        req_data[4] = 0;
+        req_data[5] = 0xff;
+    
+        req_ret = ipmi_request(ipmi_addr, CMD_GET_DEVICE_SDR, req_data, GET_SDR_REQ_LEN);
+        if (!req_ret)
+            return NULL;
+    
+        recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+    
+        if (recv_ret == pdFALSE) /* 接收失败 */
+            return NULL;
+    
+        *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
+        p_res_data = malloc(*res_len);
+    
+        memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
+    }
+    else
+    {
+        if (record_id == 0x0000)
+            target_sdr_index = 0;
+        else {
+            for (uint8_t i = 0; i < g_sdr_index.sdr_count; i++)
+            {
+                if(record_id == g_sdr_index.info[i].id) {
+                    target_sdr_index = i;
+                    break;
+                }
+            }
+        }
 
-    req_ret = ipmi_request(ipmi_addr, CMD_GET_DEVICE_SDR, req_data, GET_SDR_REQ_LEN);
-    if (!req_ret)
-        return NULL;
+        start_addr = g_sdr_index.info[target_sdr_index].addr;
+        *res_len = 2 + (g_sdr_index.info)[target_sdr_index].len;
 
-    recv_ret = xQueueReceive(res_queue, &temp_recv, portTICK_PERIOD_MS*WAIT_RESPONSE_MAX);
+        p_res_data = malloc(*res_len);
 
-    if (recv_ret == pdFALSE) /* 接收失败 */
-        return NULL;
+        if (target_sdr_index == (g_sdr_index.sdr_count - 1))
+            ((uint16_t*)(p_res_data))[0] = 0x0000;
+        else
+            ((uint16_t*)(p_res_data))[0] = g_sdr_index.info[target_sdr_index+1].id;
 
-    *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
-    p_res_data = malloc(*res_len);
-
-    memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
+        read_flash(start_addr, ((*res_len)-2), &(p_res_data[2]));
+    }
 
     return p_res_data;
 }
@@ -681,11 +704,16 @@ static int get_sensor_list_task_func(int argc, char* argv[])
 
     ipmi_addr = strtoul(argv[1], &temp_p, 0);
 
-    sdr_info = get_device_sdr_info(ipmi_addr);
-    if (sdr_info == NULL)
-        return -1;
+    if (ipmi_addr == g_local_addr) 
+        sensor_num = g_sdr_index.sdr_count;
 
-    sensor_num = sdr_info[0];
+    else {
+        sdr_info = get_device_sdr_info(ipmi_addr);
+        if (sdr_info == NULL)
+            return -1;
+    
+        sensor_num = sdr_info[0];
+    }
 
     if (sensor_num == 0) {
         PRINTF("No Sensor in 0x%02x\r\n", ipmi_addr);
@@ -726,4 +754,89 @@ static int get_sensor_list_task_func(int argc, char* argv[])
 
     return 1;
 
+}
+
+/*** 
+ * @brief 获取fru info，占位
+ * @return [void]
+ */
+static void get_fru_info(void)
+{
+    g_fru.ipmb_addr = g_local_addr;
+    g_fru.hard_addr = (g_local_addr>>1);
+    g_fru.slot = 0;
+    strcpy(g_fru.device_name, DEVICE_NAME);
+    g_fru.device_id = DEVICE_ID;
+    g_fru.prodect_id = PRODUCT_ID;
+    g_fru.device_rev = DEVICE_REVISION;
+    g_fru.firmware_rev_maj = FIRMWARE_REVISION_MAJOR;
+    g_fru.firmware_rev_min = FIRMWARE_REVISION_MINOR;
+    g_fru.ipmi_ver = IPMI_VERSION;
+    g_fru.additional = ADDITIONAL;
+    g_fru.manuf_id = MANUFACTURER_ID;
+    g_fru.aux_firmware_rev = AUXILIARY_FIRMWARE_REV;
+}
+
+/*** 
+ * @brief 更新传感器数据任务函数
+ * @param argc [int]    参数个数
+ * @param argv [char*]  参数列表
+ * @return [int]        执行结果
+ */
+static int update_sensor_data_task_func(int argc, char* argv[])
+{
+    uint8_t data[4];
+    uint8_t ht_data[2];
+    sensor_ev_t temp_p;
+    uint8_t temp_sdr_M[6];
+    uint8_t temp_str_len = 0;
+
+    /* 读取传感器数据 */
+    data[0] = read_sdr1_sensor_data();
+    data[1] = read_sdr2_sensor_data();
+    data[2] = read_sdr3_sensor_data();
+    data[3] = read_sdr4_sensor_data();
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        /* 向sdr更新数据 */
+        write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &(data[i]));
+
+        /* 判断是否为正常数据 */
+        read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 2, ht_data);
+        if((data[i] < ht_data[1]) || (data[i] > ht_data[0]))
+        {
+            read_flash((g_sdr_index.info[i].addr)+SDR_M_OFFSET, 6, temp_sdr_M);
+            temp_p.addr = g_local_addr;
+            temp_p.read_val = data_conversion((short)(data[i]), temp_sdr_M);
+            temp_p.max_val = data_conversion((short)(ht_data[0]), temp_sdr_M);
+            temp_p.min_val = data_conversion((short)(ht_data[1]), temp_sdr_M);
+            read_flash((g_sdr_index.info[i].addr)+SDR_SENSOR_NUMBER_OFFSET, 1, &(temp_p.sensor_no)); 
+            memset(temp_p.sensor_name, 0, 16);
+            read_flash((g_sdr_index.info[i].addr)+SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &temp_str_len);
+            read_flash((g_sdr_index.info[i].addr)+SDR_ID_STR_BYTE_OFFSET, temp_str_len, (uint8_t*)(temp_p.sensor_name));
+
+            /* 上报事件 */
+            xQueueSend(event_queue, &temp_p, portMAX_DELAY);
+        }
+    }
+
+    return 1;
+}
+
+/*** 
+ * @brief 事件处理任务函数
+ * @param arg [void*]    任务函数参数
+ * @return [void]
+ */
+static void event_handler(void* arg)
+{
+    sensor_ev_t temp;
+
+    while (1)
+    {
+        /* 接收并处理事件数据 */
+        if (pdTRUE == xQueueReceive(event_queue, &temp, portMAX_DELAY))
+            PRINTF("w: 0x%02x\t%s\tl: %f\tr: %f\tu: %f\r\n", temp.addr, temp.sensor_name, temp.min_val, temp.read_val, temp.max_val);
+    }
 }

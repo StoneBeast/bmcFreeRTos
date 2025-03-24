@@ -3,7 +3,7 @@
  * @Date         : 2025-01-21 16:25:45
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-02-18 15:56:30
+ * @LastEditTime : 2025-03-24 16:04:34
  * @Description  : 串口终端程序的主要逻辑实现
  */
 
@@ -13,7 +13,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include "link_list.h"
-#include "uartConsoleTask.h"
 #include <stdlib.h>
 #include "cmsis_os.h"
 
@@ -173,7 +172,7 @@ void console_start(void)
                     g_console.cursor++;
                     g_console.edit_buffer_changed_flag = 1;
                 }
-                else if (temp_buffer[0] == KEY_BACKSPACE && (g_console.cursor > 0))            /* 退格键 */
+                else if (((temp_buffer[0] == KEY_Win_BACKSPACE)||(temp_buffer[0] == KEY_Unix_BACKSPACE)) && (g_console.cursor > 0))            /* 退格键 */
                 {
                     memmove(g_console.edit_buffer + g_console.cursor - 1, g_console.edit_buffer + g_console.cursor, g_console.edit_len - g_console.cursor + 1);
                     g_console.edit_len--;
@@ -275,7 +274,7 @@ void CONSOLE_UART_IRQ_HANDLER(void)
 void console_printf(const char* fmt, ...)
 {
     uint16_t i = 0;
-    char *buffer = (char *)malloc(strlen(fmt) + 128);
+    char *buffer = (char *)pvPortMalloc(strlen(fmt) + 128);
 
     va_list args;
     va_start(args, fmt);
@@ -291,5 +290,5 @@ void console_printf(const char* fmt, ...)
     }
     xSemaphoreGive(uart_mutex);
 
-    free(buffer);
+    vPortFree(buffer);
 }

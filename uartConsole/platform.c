@@ -82,16 +82,3 @@ uint32_t __USER get_ticks(void)
     return HAL_GetTick();
 #endif
 }
-
-void __USER inc_ticks(void)
-{
-#if USE_PRIVATE_TICKS
-    g_Ticks++;
-#else
-    // __USER increase ticks;
-    /* don't use private ticks */
-    HAL_IncTick();
-#endif
-}
-
-

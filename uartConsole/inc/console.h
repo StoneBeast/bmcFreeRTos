@@ -3,7 +3,7 @@
  * @Date         : 2025-01-21 16:25:53
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-01-24 14:12:54
+ * @LastEditTime : 2025-03-11 18:23:43
  * @Description  : 存放一些终端操作定义
  */
 
@@ -11,6 +11,7 @@
 #define __CONSOLE_H
 
 #include "link_list.h"
+#include "uartConsoleTask.h"
 
 #define BUFFER_LEN              256
 
@@ -23,7 +24,8 @@
 #define KEY_RIGHT           "\x1b\x5b\x43"      /* [right] key: 0x1b 0x5b 0x43 */
 #define KEY_LEFT            "\x1b\x5b\x44"      /* [left] key: 0x1b 0x5b 0x44 */
 #define KEY_ENTER           '\r'                /* [enter] key */
-#define KEY_BACKSPACE       '\x7f'              /* [backspace] key: 0x7f */
+#define KEY_Win_BACKSPACE   '\x7f'              /* [backspace] key: 0x7f(win) */
+#define KEY_Unix_BACKSPACE  '\x08'              /* [backspace] key: 0x08(unix) */
 #define KEY_HOME            "\x1b\x5b\x48"      /* [home] key: 0x1b 0x5b 0x48 */
 #define KEY_END             "\x1b\x5b\x46"      /* [end] key: 0x1b 0x5b 0x46 */
 #define KEY_DELETE          "\x1b\x5b\x33\x7e"  /* [delete] key: 0x1b 0x5b 0x33 0x7e */
@@ -70,9 +72,11 @@ typedef struct
     uint8_t delete_flag;                /* 删除标志 */
 }console_struct;
 
-void console_printf(const char *fmt, ...);
-
 extern link_list_manager* g_console_task_list;  /* 全局task链表 */
 extern link_list_manager* g_console_bg_task_list;   /* 全局后台task链表 */
+
+void console_printf(const char *fmt, ...);
+void console_task_register(Task_t* task);
+void console_backgroung_task_register(Bg_task_t* task);
 
 #endif // !__CONSOLE_H

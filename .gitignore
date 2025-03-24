@@ -17,3 +17,6 @@
 # cubeMX project file
 *.ioc
 /.mxproject
+
+#debug file
+STM32F103.svd
