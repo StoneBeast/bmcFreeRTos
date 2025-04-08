@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 14:49:35
+ * @LastEditTime : 2025-04-08 18:21:56
  * @Description  : 
  */
 
@@ -15,8 +15,6 @@
 #include <string.h>
 #include "bmc.h"
 
-static sys_req_t request_recv_buffer;
-static uint8_t send_buffer[BUFFER_LEN] = {0};
 static uint8_t get_checksum(const uint8_t *msg, uint16_t msg_len);
 static uint8_t check_msg(const uint8_t *msg, uint16_t msg_len);
 static void get_file_list_handler(void);
@@ -26,14 +24,15 @@ static void get_sensor_list_handler(uint8_t ipmi_addr);
 static void get_event(void);
 static void response(uint8_t* res, uint16_t res_len);
 
-// TODO: 使用互斥量，保证互斥访问
-// extern sensor_ev_t g_event_arr[16];
-// extern uint8_t event_count;
-// extern uint8_t event_arr_p;
-
+static sys_req_t request_recv_buffer;           /* 接收请求buffer */
+static uint8_t send_buffer[BUFFER_LEN] = {0};   /* 发送响应的buffer，最大长度为 BUFFER_LEN */
 // TODO: 不确定是否要使用队列，消息缓冲区等也可以考虑
-QueueHandle_t sys_req_queue;
+QueueHandle_t sys_req_queue;                    /* 存放请求的队列 */
 
+/*** 
+ * @brief 初始化系统接口使用到的硬件
+ * @return [void]
+ */
 void init_sysInterface(void)
 {
     init_status_led();
@@ -41,9 +40,13 @@ void init_sysInterface(void)
     enable_uart_interrupt();
 }
 
+/*** 
+ * @brief 请求处理函数
+ * @return [void]
+ */
 void sys_request_handler(void)
 {
-    sys_req_t req;
+    sys_req_t req; /* 接收请求 */
 
     sys_req_queue = xQueueCreate(2, sizeof(sys_req_t));
 
@@ -82,6 +85,12 @@ void sys_request_handler(void)
     }
 }
 
+/*** 
+ * @brief 计算校验码
+ * @param msg [uint8_t*]        指向消息的指针
+ * @param msg_len [uint16_t]    消息长度
+ * @return [uint8_t]            校验和
+ */
 static uint8_t get_checksum(const uint8_t *msg, uint16_t msg_len)
 {
     uint8_t sum = 0;
@@ -95,6 +104,12 @@ static uint8_t get_checksum(const uint8_t *msg, uint16_t msg_len)
     return chk;
 }
 
+/*** 
+ * @brief 检查校验和
+ * @param msg [uint8_t*]        指向消息的指针
+ * @param msg_len [uint16_t]    消息长度
+ * @return [uint8_t]            消息完整/不完整 : 0/1
+ */
 static uint8_t check_msg(const uint8_t *msg, uint16_t msg_len)
 {
     uint8_t sum = 0;
@@ -108,9 +123,14 @@ static uint8_t check_msg(const uint8_t *msg, uint16_t msg_len)
     return 0;
 }
 
+/*** 
+ * @brief 获取文件最大序号处理函数
+ * @return [void]
+ */
 static void get_file_list_handler(void)
 {
     uint8_t* ret_msg = NULL;
+    /* 获取最大文件编号 */
     uint16_t file_count = get_file_count();
     uint16_t length = MSG_FORMAT_LENGTH + 2;
 
@@ -123,9 +143,15 @@ static void get_file_list_handler(void)
 
     ret_msg[length - 1] = get_checksum(ret_msg, length - 1);
     response(ret_msg, length);
+    /* 释放ret_msg */
     free(ret_msg);
 }
 
+/*** 
+ * @brief 读取文件处理函数
+ * @param file_index [uint16_t]    请求读取的文件标号
+ * @return [void]
+ */
 static void read_file_handler(uint16_t file_index)
 {
     uint8_t* ret_msg = NULL;
@@ -133,19 +159,23 @@ static void read_file_handler(uint16_t file_index)
     lfs_file_t log_file;
     lfs_ssize_t rb = 0;
 
+    /* 填充响应信息 */
     ret_msg = malloc(256);
     ret_msg[MSG_TYPE_OFFSET] = SYS_MSG_TYPE_RES;
     ret_msg[MSG_CODE_OFFSET] = SYS_FILE_READ;
 
+    /* 拼接文件名 */
     sprintf(file_name, "%04d", file_index);
     lfs_file_open(&lfs, &log_file, file_name, LFS_O_RDONLY);
 
+    /* 每次读取 256-MSG_FORMAT_LENGTH-1 字节数据，如果实际读取的数据小于这个数字则说明文件读取完毕 */
     do
     {
         memset(&(ret_msg[MSG_DATA_OFFSET]), 0, 256-MSG_FORMAT_LENGTH-1);
         rb = lfs_file_read(&lfs, &log_file, &(ret_msg[MSG_DATA_OFFSET + 1]), 256 - MSG_FORMAT_LENGTH - 1);
 
         if (rb == (256 - MSG_FORMAT_LENGTH - 1)) {
+            /* data域第0个数据存放数据完结标志，0xFF代表未完结，0xAA则代表读取完毕 */
             ret_msg[MSG_DATA_OFFSET] = 0xFF;
             *((uint16_t*)&(ret_msg[MSG_LEN_OFFSET]))  = (256 - MSG_FORMAT_LENGTH);
             ret_msg[255] = get_checksum(ret_msg, 256-1);
@@ -159,10 +189,15 @@ static void read_file_handler(uint16_t file_index)
 
     } while (rb == (256 - MSG_FORMAT_LENGTH - 1));
 
+    /* 关闭文件，释放空间 */
     lfs_file_close(&lfs, &log_file);
     free(ret_msg);
 }
 
+/*** 
+ * @brief 获取板卡列表处理函数
+ * @return [void]
+ */
 static void get_card_list_handler(void)
 {
     uint8_t* card_addr_list = NULL;
@@ -187,6 +222,11 @@ static void get_card_list_handler(void)
     free(ret_msg);
 }
 
+/*** 
+ * @brief 获取传感器列表
+ * @param ipmi_addr [uint8_t]   目标设备地址
+ * @return [void]
+ */
 static void get_sensor_list_handler(uint8_t ipmi_addr)
 {
     uint8_t* ret_msg = NULL;
@@ -208,14 +248,17 @@ static void get_sensor_list_handler(uint8_t ipmi_addr)
     free(ret_msg);
 }
 
+/*** 
+ * @brief 获取事件
+ * @return [void]
+ */
 static void get_event(void)
 {
-    uint8_t event_count = 0;
-    sensor_ev_t temp_event;
-    // uint8_t event_ret = 0;
-    uint8_t* ret_msg = NULL;
-    uint16_t data_len = 0;
-    uint16_t msg_point = MSG_DATA_OFFSET;
+    uint8_t event_count = 0;                /* 事件个数 */
+    sensor_ev_t temp_event;                 /* 临时用来存放取出的事件实例 */
+    uint8_t* ret_msg = NULL;                /* 返回消息 */
+    uint16_t data_len = 0;                  /* 响应中data域的长度 */
+    uint16_t msg_point = MSG_DATA_OFFSET;   /* 响应消息填充指针 */
 
     event_count = get_event_count();
     ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 27);
@@ -260,10 +303,18 @@ static void get_event(void)
     free(ret_msg);
 }
 
+/*** 
+ * @brief 发送响应消息
+ * @param res [uint8_t*]        指向消息的指针
+ * @param res_len [uint16_t]    响应长度
+ * @return [void]
+ */
 static void response(uint8_t *res, uint16_t res_len)
 {
+    /* 将实际响应的数据复制到发送缓冲中 */
     memset(send_buffer, 0, BUFFER_LEN);
     memcpy(send_buffer, res, res_len);
+    /* 停止任务调度，防止发送过程中因任务调度而产生断帧 */
     vTaskSuspendAll();
     interface_uart_send_data(send_buffer, BUFFER_LEN);
     xTaskResumeAll();

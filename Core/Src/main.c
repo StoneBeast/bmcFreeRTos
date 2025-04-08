@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 16:08:09
+ * @LastEditTime : 2025-04-08 17:53:51
  * @Description  : main.c
  */
 
@@ -43,7 +43,6 @@
 #include "my_task.h"
 
 //TODO: 使用vTaskDelay替换阻塞延时
-//TODO: RAM瓶颈！
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -81,7 +80,6 @@ void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
 void sys_req_handler(void *arg);
-// void startConsole(void *arg);
 void startBackgroundTask(void *arg);
 void writeFile(void *arg);
 
@@ -128,9 +126,6 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 #endif //! 0
-    /* 初始化uartConsole使用到的硬件 */
-    // init_hardware();
-
     timer_task_t blink = {
         .task_func = led_blink,
         .task_name = "blink",
@@ -141,8 +136,6 @@ int main(void)
 
     g_timer_task_manager = init_task_list();
     timer_task_register(g_timer_task_manager, &blink);
-    /* 初始化uartConsole中的任务以及后台任务队列 */
-    // init_console_task();
     /* 初始化bmc */
     init_bmc();
 
@@ -214,22 +207,11 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-/***
- * @brief uartConsole task函数
- * @param arg [void*]       该task中不使用arg
+/*** 
+ * @brief task function, 处理系统接口发送的消息
+ * @param *arg [void]   参数
  * @return [void]
  */
-// void startConsole(void *arg)
-// {
-//     if (fs_flag)
-//         PRINTF("mount fs success\r\n");
-//     else
-//         PRINTF("mount fs failed\r\n");
-
-//     /* 启动uartConsole */
-//     console_start();
-// }
-
 void sys_req_handler(void *arg)
 {
     sys_request_handler();
@@ -242,11 +224,11 @@ void sys_req_handler(void *arg)
  */
 void startBackgroundTask(void *arg)
 {
+    /* 开启ipmb监听 */
     HAL_I2C_EnableListen_IT(&hi2c1);
     /* 轮询是否有后台任务需要执行 */
     while (1) {
         task_handler(g_timer_task_manager);
-        // run_background_task();
     }
 }
 
@@ -314,12 +296,15 @@ void writeFile(void *arg)
 
     /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
     xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 1, req_Stack, &req_TaskBuffer);
-    // xTaskCreateStatic(startConsole, "uartConsole", 1024 * 2, NULL, 1, c_Stack, &c_TaskBuffer);
     xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
     /* 创建接下来的任务后删除当前任务 */
     vTaskDelete(NULL);
 }
 
+/*** 
+ * @brief 运行指示灯闪烁
+ * @return [void]
+ */
 static void led_blink(void)
 {
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_8);

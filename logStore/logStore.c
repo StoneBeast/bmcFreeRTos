@@ -3,7 +3,7 @@
  * @Date         : 2025-03-10 16:28:57
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-01 19:01:20
+ * @LastEditTime : 2025-04-08 17:24:26
  * @Description  : 日志存储功能功能函数
  */
 
@@ -39,23 +39,6 @@ const struct lfs_config cfg = {
 };
 
 static void free_fs(void);
-
-#if 0
-static void send_stream(uint8_t* data, uint32_t len);
-
-static int fs_ls_func(int argc, char* argv[]);
-static int fs_cat_func(int argc, char* argv[]);
-static int fs_reformat_func(int argc, char* argv[]);
-
-/* 文件系统操作 */
-Task_t fs_opts[] = {
-    {"fs_ls", "list file in current directory", fs_ls_func},
-    {"fs_cat", "fs_cat <name> [count], display file [count]/full byte", fs_cat_func},
-    {"fs_format", "re-format flash and re-mount fs", fs_reformat_func},
-    {"", "", NULL}
-};
-
-#endif
 
 uint8_t fs_flag = 0;                        /* 文件系统挂载标志位 */
 W25QXX_HandleTypeDef w25qxx;                /* w25qxx操作实例 */
@@ -173,128 +156,6 @@ static void free_fs(void)
         mount_fs();
     }
 }
-
-#if 0
-/*** 
- * @brief 注册文件系统操作函数
- * @return [void]
- */
-void register_fs_ops(void)
-{
-    uint16_t i = 0;
-
-    while (strlen(fs_opts[i].task_name) != 0)
-    {
-        console_task_register(&fs_opts[i]);
-        i++;
-    }
-}
-
-/*** 
- * @brief 显示当前目录下所有文件
- * @param argc [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        任务执行结果
- */
-static int fs_ls_func(int argc, char* argv[])
-{
-    int f_res;
-    lfs_dir_t dir;
-    struct lfs_info info;
-
-    if (argc != 1) {
-        PRINTF("too many args\r\n");
-        return -1;
-    }
-
-    f_res = lfs_dir_open(&lfs, &dir, "/");
-    if (f_res == 0) {
-        for (;;) {
-            f_res = lfs_dir_read(&lfs, &dir, &info);
-            if (f_res == 0 || info.name[0] == 0)
-                break;
-
-            PRINTF("%s\t%luB\r\n", info.name, info.size);
-        }
-        lfs_dir_close(&lfs, &dir);
-    } else {
-        PRINTF("open dir failed\r\n");
-    }
-
-    return 1;
-
-}
-
-/*** 
- * @brief 读取指定文件
- * @param argc [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        任务执行结果
- */
-static int fs_cat_func(int argc, char* argv[])
-{
-    int f_res;
-    lfs_file_t log_file;
-    char read_buf[READ_BUFFER_MAX_LEN] = {0};
-    lfs_ssize_t read_bytes;     /* 读取到的数据长度 */
-    UBaseType_t current;        /* 当前任务优先级 */
-
-    if ( argc>3 || argc <2 )
-    {
-        PRINTF("args error\r\n");
-        return -1;
-    }
-
-    f_res = lfs_file_open(&lfs, &log_file, argv[1], LFS_O_RDONLY);
-    if (f_res != 0) {
-        PRINTF("open %s failed\r\n", argv[1]);
-        return 1;
-    }
-
-    PRINTF("log %s: size: %luB\r\n", argv[1], lfs_file_size(&lfs, &log_file));
-
-    /* 记录当前任务优先级 */
-    current = uxTaskPriorityGet(NULL);
-    vTaskPrioritySet(NULL, configMAX_PRIORITIES-1);
-    /* 采用分段读取的方式读取，每次读取READ_BUFFER_MAX_LEN字节 */
-    do
-    {
-        read_bytes           = lfs_file_read(&lfs, &log_file, read_buf, READ_BUFFER_MAX_LEN);
-        send_stream((uint8_t *)read_buf, read_bytes);
-    } while (read_bytes == READ_BUFFER_MAX_LEN);
-    PRINTF("\r\n");
-    
-    lfs_file_close(&lfs, &log_file);
-    vTaskPrioritySet(NULL, current);
-
-    return 1;
-}
-
-/*** 
- * @brief 重新格式化并挂载文件系统操作
- * @param argc [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        执行结果
- */
-static int fs_reformat_func(int argc, char* argv[])
-{
-    lfs_format(&lfs, &cfg);
-    mount_fs();
-
-    return 1;
-}
-
-/*** 
- * @brief 文件数据发送函数，方便移植不同的数据发送方式
- * @param data [uint8_t*]   指向数据的指针
- * @param len [uint32_t]    数据长度
- * @return [void]
- */
-static void send_stream(uint8_t *data, uint32_t len)
-{
-    HAL_UART_Transmit(&huart1, data, len, 100);
-}
-#endif
 
 void USART3_IRQHandler(void)
 {

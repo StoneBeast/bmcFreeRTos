@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 16:42:00
+ * @LastEditTime : 2025-04-08 17:10:16
  * @Description  : ipmi功能实现
  */
 
@@ -33,26 +33,20 @@ uint8_t timeout_seq_count= 0;                   /* 超时请求个数 */
 link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的链表 */
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
-// QueueHandle_t event_queue;                      /* 事件通知队列 */
 SemaphoreHandle_t event_queue_mutex;
 
 static sensor_ev_t g_event_arr[EVENT_MAX_COUNT];
 static uint8_t event_count = 0;
 static uint8_t event_arr_p = 0;
-// TaskHandle_t event_handler_task;
 
 extern link_list_manager *g_timer_task_manager;
 
 uint8_t* scan_device(uint16_t* device_count);
-// static int scan_device(int argc, char* argv[]);
-// static int info_device(int argc, char* argv[]);
 static void get_fru_info(void);
 uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
-// static int get_sensor_list_task_func(int argc, char *argv[]);
 static void update_sensor_data_task_func(void);
-// static void event_handler(void* arg);
 
 /*** 
  * @brief 获取本地地址
@@ -244,25 +238,6 @@ uint8_t init_bmc(void)
         .time_interval = 5003
     };
 
-    /* 添加主动任务 */
-    // Task_t scan_device_task = {
-    //     .task_func = scan_device,
-    //     .task_name = "device",
-    //     .task_desc = "display all device"
-    // };
-
-    // Task_t info_device_task = {
-    //     .task_func = info_device,
-    //     .task_name = "info",
-    //     .task_desc = "info <addr> display device info"
-    // };
-
-    // Task_t get_sensor_list_task = {
-    //     .task_func = get_sensor_list_task_func,
-    //     .task_name = "sensor",
-    //     .task_desc = "sensor <ipmi addr>"
-    // };
-
     if (!init_ipmb())
         return 0;
 
@@ -271,19 +246,12 @@ uint8_t init_bmc(void)
     index_sdr(&g_sdr_index);
     ipmi_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
-    // console_task_register(&scan_device_task);
-    // console_task_register(&info_device_task);
-    // console_task_register(&get_sensor_list_task);
-    // console_backgroung_task_register(&res_handle_task);
-    // console_backgroung_task_register(&update_sensor_task);
 
     timer_task_register(g_timer_task_manager, &res_handle_task);
     timer_task_register(g_timer_task_manager, &update_sensor_task);
 
     res_queue = xQueueCreate(5, sizeof(ipmb_recv_t));
-    // event_queue = xQueueCreate(5, sizeof(sensor_ev_t));
     event_queue_mutex = xSemaphoreCreateMutex();
-    // xTaskCreate(event_handler, "event", 256, NULL, 1, &event_handler_task);
 
     return g_local_addr;
 }
@@ -494,15 +462,7 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
         temp_e.sensor_name_len = msg[RESPONSE_DATA_START + EVENT_BODY_NAME_LEN_OFFSET];
         memcpy(temp_e.sensor_name, &(msg[RESPONSE_DATA_START + EVENT_BODY_NAME_OFFSET]), temp_e.sensor_name_len);
 
-        // temp_e.min_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_MIN_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
-        // temp_e.read_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_READ_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
-        // temp_e.max_val = data_conversion(msg[RESPONSE_DATA_START+EVENT_BODY_MAX_VAL_OFFSET], &(msg[RESPONSE_DATA_START+EVENT_BODY_START_M_OFFSET]));
-        // memset(temp_e.sensor_name, 0, 16);
-        // memcpy(temp_e.sensor_name, &(msg[RESPONSE_DATA_START+EVENT_BODY_NAME_OFFSET]), msg[RESPONSE_DATA_START+EVENT_BODY_NAME_LEN_OFFSET]);
-        // xQueueSendFromISR(event_queue, &temp_e, NULL);
-
         push_event_from_isr(temp_e);
-        // vTaskNotifyGiveFromISR(event_handler_task, NULL);
     }
     else
     {
@@ -574,25 +534,6 @@ uint8_t* scan_device(uint16_t* device_count)
     *device_count = temp_count;
 
     return addr_list;
-
-    // PRINTF("=================== Device List ===================\r\n");
-    // PRINTF("Slot\tIPMB Addr\tDevice Name\t\r\n");
-
-    /* 本机信息 */
-    // PRINTF("%-4s\t0x%-8x\t%s\r\n", "----", g_local_addr, "local");
-
-    /* 插槽数量事先设定 */
-    // for (i = 0; i < SLOT_COUNT; i++)
-    // {
-    //     ret_fru = ipmi_get_device_ID(VPX_IPMB_ADDR((VPX_BASE_HARDWARE_ADDR+1+i)));
-
-    //     if (ret_fru)
-    //     {
-    //         PRINTF("%-4d\t0x%-8x\tDev%d\r\n", i+1, VPX_IPMB_ADDR((VPX_BASE_HARDWARE_ADDR+1+i)), i);
-    //     }
-    // }
-
-    // return 1;
 }
 
 /*** 
@@ -621,92 +562,6 @@ uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg)
     return 1;
 }
 
-/*** 
- * @brief 显示指定设备信息
- * @param argc [int]    参数个数
- * @param argv [char*]  参数列表
- * @return [int]        执行结果
- */
-// static int info_device(int argc, char* argv[])
-// {
-//     fru_t* res_fru;             /* 接收处理完成后的设备信息 */
-//     char* temp_p = NULL;        /* 用于 字符串-整型 转换 */
-//     uint8_t ipmb_addr = 0x00;   /* 目标设备地址 */
-
-//     if (argc != 2)  /* 判断参数个数 */
-//     {
-//         PRINTF("Usage: \r\n\tinfo [addr]\r\n");
-//         return -1;
-//     }
-
-//     /* 判断地址合法性 */
-//     ipmb_addr = strtoul(argv[1], &temp_p, 0);
-//     if ((!ASSERENT_VPX_IPMB_ADDR(ipmb_addr)) && (ipmb_addr != g_local_addr))
-//     {
-//         PRINTF("addr invalid\r\n");
-//         return -1;
-//     }
-
-//     /* 获取设备信息 */
-//     if (ipmb_addr == g_local_addr)
-//         res_fru = &g_fru;
-//     else
-//         res_fru = ipmi_get_device_ID(ipmb_addr);
-
-//     if (res_fru == NULL)
-//         PRINTF("request send error\r\n");
-//     else {  /* 打印信息 */
-//         PRINTF("\r\n");
-//         PRINTF("Solt: %d\r\n", res_fru->slot);
-//         PRINTF("Device ID: 0x%02\r\n", res_fru->device_id);
-//         PRINTF("Device %sProvides SDRs\r\n", ((res_fru->provides_sdr == 0x00) ? "don't ":" "));
-//         PRINTF("Device Revision: %d\r\n", res_fru->device_rev);
-//         PRINTF("Device Available: %s\r\n", (res_fru->device_avaliable == 0x00) ? "normal operation":"busy");
-//         PRINTF("Firmware Revision: %d.%d\r\n", res_fru->firmware_rev_maj, res_fru->firmware_rev_min);
-//         PRINTF("IPMI Version: %d.%d\r\n", (res_fru->ipmi_ver)&0x03, (res_fru->ipmi_ver) >> 4);
-//         PRINTF("Additional Device Support:\r\n");
-//         /* additional */
-//         if ((res_fru->additional) & (0x01))
-//             PRINTF("\tSensor Device\r\n");
-
-//         if ((res_fru->additional) & (0x01 << 1))
-//             PRINTF("\tSDR Repository Device\r\n");
-        
-//         if ((res_fru->additional) & (0x01 << 2))
-//             PRINTF("\tSEL Device\r\n");
-
-//         if ((res_fru->additional) & (0x01 << 3))
-//             PRINTF("\tFRU Inventory Device\r\n");
-
-//         if ((res_fru->additional) & (0x01 << 4))
-//             PRINTF("\tIPMB Event Receiver\r\n");
-            
-//         if ((res_fru->additional) & (0x01 << 5))
-//             PRINTF("\tIPMB Event Generator\r\n");
-
-//         if ((res_fru->additional) & (0x01 << 6))
-//             PRINTF("\tBridge\r\n");
-
-//         if ((res_fru->additional) & (0x01 << 7))
-//             PRINTF("\tChassis Device\r\n");
-
-//         PRINTF("Manufacturer ID: 0x%x\r\n"
-//                "Product ID: %x\r\n"
-//                "Auxiliary Firmware Revison Info: %02xH %02xH %02xH %02xH \r\n",
-//                res_fru->manuf_id,
-//                res_fru->prodect_id,
-//                ((uint8_t*)(&(res_fru->aux_firmware_rev)))[0],
-//                ((uint8_t*)(&(res_fru->aux_firmware_rev)))[1],
-//                ((uint8_t*)(&(res_fru->aux_firmware_rev)))[2],
-//                ((uint8_t*)(&(res_fru->aux_firmware_rev)))[3]
-//               );
-
-//         if (ipmb_addr != g_local_addr)
-//             free(res_fru);
-//     }
-
-//     return 1;
-// }
 
 /*** 
  * @brief 获取目标设备的指定sdr记录
@@ -967,18 +822,8 @@ static void update_sensor_data_task_func(void)
             read_flash((g_sdr_index.info[i].addr) + SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &(temp_p.sensor_name_len));
             read_flash((g_sdr_index.info[i].addr) + SDR_ID_STR_BYTE_OFFSET, temp_p.sensor_name_len, (uint8_t *)(temp_p.sensor_name));
 
-            // temp_p.read_val = data_conversion((short)(data[i]), temp_sdr_M);
-            // temp_p.max_val = data_conversion((short)(ht_data[0]), temp_sdr_M);
-            // temp_p.min_val = data_conversion((short)(ht_data[1]), temp_sdr_M);
-            // read_flash((g_sdr_index.info[i].addr)+SDR_SENSOR_NUMBER_OFFSET, 1, &(temp_p.sensor_no)); 
-            // memset(temp_p.sensor_name, 0, 16);
-            // read_flash((g_sdr_index.info[i].addr)+SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &temp_str_len);
-            // read_flash((g_sdr_index.info[i].addr)+SDR_ID_STR_BYTE_OFFSET, temp_str_len, (uint8_t*)(temp_p.sensor_name));
-
             /* 上报事件 */
             push_event(temp_p);
-            // xTaskNotifyGive(event_handler_task);
-            // xQueueSend(event_queue, &temp_p, portMAX_DELAY);
         }
     }
 
@@ -999,21 +844,21 @@ static void event_handler(void* arg)
     {
         /* 接收并处理事件数据 */
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        // push_event(temp);
+        push_event(temp);
 
-        // if (pdTRUE == xQueueReceive(event_queue, &temp, portMAX_DELAY)) {
-            // PRINTF("w: 0x%02x\t%s\tl: %f\tr: %f\tu: %f\r\n", temp.addr, temp.sensor_name, temp.min_val, temp.read_val, temp.max_val);
-            // push_event(temp);
+        if (pdTRUE == xQueueReceive(event_queue, &temp, portMAX_DELAY)) {
+            PRINTF("w: 0x%02x\t%s\tl: %f\tr: %f\tu: %f\r\n", temp.addr, temp.sensor_name, temp.min_val, temp.read_val, temp.max_val);
+            push_event(temp);
 
-                // event_count++;
-                // if (event_count == 17)
-                //     event_count = 16;
+                event_count++;
+                if (event_count == 17)
+                    event_count = 16;
 
-                // memcpy(g_event_arr[event_arr_p], temp, sizeof(sensor_ev_t));
+                memcpy(g_event_arr[event_arr_p], temp, sizeof(sensor_ev_t));
 
-                // event_arr_p++;
-                // event_arr_p %= 16;
-        // }
+                event_arr_p++;
+                event_arr_p %= 16;
+        }
     }
 }
 #endif //!0

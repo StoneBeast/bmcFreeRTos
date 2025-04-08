@@ -35,7 +35,6 @@ extern lfs_t lfs;
 
 void init_logStore_hardware(void);
 uint16_t mount_fs(void);
-// void register_fs_ops(void);
 uint16_t get_file_count(void);
 
 #endif // !__LOG_STORE_H
