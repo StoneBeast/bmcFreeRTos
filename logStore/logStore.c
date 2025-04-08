@@ -3,7 +3,7 @@
  * @Date         : 2025-03-10 16:28:57
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-24 18:00:20
+ * @LastEditTime : 2025-04-01 19:01:20
  * @Description  : 日志存储功能功能函数
  */
 
@@ -11,13 +11,14 @@
 #include "w25qxx.h"
 #include "flashConfig.h"
 #include "logStore.h"
-#include "uartConsole.h"
 #include <stdlib.h>
 #include <string.h>
 #include "usart.h"
 #include <stdio.h>
 #include "user_lfs.h"
 #include "cmsis_os.h"
+
+#define PRINTF(...)
 
 /* littlefs 配置参数 */
 const struct lfs_config cfg = {
@@ -38,6 +39,8 @@ const struct lfs_config cfg = {
 };
 
 static void free_fs(void);
+
+#if 0
 static void send_stream(uint8_t* data, uint32_t len);
 
 static int fs_ls_func(int argc, char* argv[]);
@@ -51,6 +54,8 @@ Task_t fs_opts[] = {
     {"fs_format", "re-format flash and re-mount fs", fs_reformat_func},
     {"", "", NULL}
 };
+
+#endif
 
 uint8_t fs_flag = 0;                        /* 文件系统挂载标志位 */
 W25QXX_HandleTypeDef w25qxx;                /* w25qxx操作实例 */
@@ -85,8 +90,7 @@ void init_logStore_hardware(void)
 uint16_t mount_fs(void)
 {
     // TODO: 可以使用直接记录整型数据，而非字符数据的方式
-    char index_str[8] = {0};    /* 记录日志文件索引 */
-    uint16_t index_i  = 0;      /* 日子文件序号 */
+    uint16_t meta_data = 0;
     lfs_file_t index_file;      /* 日志文件实例 */
 
     /* 尝试挂载文件系统，挂载失败则格式化 */
@@ -102,27 +106,49 @@ uint16_t mount_fs(void)
     free_fs();
 
     /* 读取index文件，或许需要写入的文件名 */
-    err = lfs_file_open(&lfs, &index_file, "index", LFS_O_RDWR | LFS_O_CREAT);
+    err = lfs_file_open(&lfs, &index_file, ".index", LFS_O_RDWR | LFS_O_CREAT);
     if (err) {
         PRINTF("no file\r\n");
         return 0;
     }
 
-    err = lfs_file_read(&lfs, &index_file, &index_str, 4);
+    err = lfs_file_read(&lfs, &index_file, &meta_data, 2);
 
-    index_i = atoi((char *)index_str);
-    index_i++;
-    sprintf(index_str, "%04d", index_i);
+    meta_data++;
 
     /* 写入新的标号，覆盖旧的标号 */
     lfs_file_rewind(&lfs, &index_file);
-    err = lfs_file_write(&lfs, &index_file, index_str, 4);
+    err = lfs_file_write(&lfs, &index_file, &meta_data, 2);
 
     lfs_file_close(&lfs, &index_file);
 
     fs_flag = 1;
 
-    return index_i;
+    return meta_data;
+}
+
+uint16_t get_file_count(void)
+{
+    int f_res = 0;
+    uint16_t file_count = 0;
+    lfs_file_t index_file;
+    lfs_ssize_t rw_b;
+
+    f_res = lfs_file_open(&lfs, &index_file, ".index", LFS_O_RDWR);
+    if (f_res)
+        goto FILE_COUNT_END;
+
+    rw_b = lfs_file_read(&lfs, &index_file, &file_count, 2);
+    if (rw_b != 2)
+        goto FILE_COUNT_END;
+
+    if (file_count == 0)
+        goto FILE_COUNT_END;
+
+
+FILE_COUNT_END:
+    lfs_file_close(&lfs, &index_file);
+    return file_count;
 }
 
 /*** 
@@ -148,6 +174,7 @@ static void free_fs(void)
     }
 }
 
+#if 0
 /*** 
  * @brief 注册文件系统操作函数
  * @return [void]
@@ -267,6 +294,7 @@ static void send_stream(uint8_t *data, uint32_t len)
 {
     HAL_UART_Transmit(&huart1, data, len, 100);
 }
+#endif
 
 void USART3_IRQHandler(void)
 {
