@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-19 18:14:22
+ * @LastEditTime : 2025-04-03 14:48:54
  * @Description  : SDR相关操作函数
  */
 
@@ -137,6 +137,25 @@ char* get_val_str(uint8_t* sdr_start_units1)
     free(unit);
 
     return ret_str;
+}
+
+void get_M_K2(short* M, short* K2, uint8_t* sdr_start_units1)
+{
+    short temp_M = 0;
+    short temp_K2 = 0;
+    uint8_t temp_k = 0;
+
+    temp_M = get_M_B(sdr_start_units1[4], sdr_start_units1[5]);
+    temp_k = ((sdr_start_units1[9] >> 4) & 0x0F);
+    if (temp_k & 0x08) {
+        /* 负数 */
+        temp_K2 = (short)(temp_k | 0xFFF0);
+    } else {
+        temp_K2 = (short)temp_k;
+    }
+
+    *M = temp_M;
+    *K2 = temp_K2;
 }
 
 uint8_t index_sdr(sdr_index_info_t* sdr_info)

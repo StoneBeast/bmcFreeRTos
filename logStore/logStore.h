@@ -3,7 +3,7 @@
  * @Date         : 2025-03-11 18:10:39
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-24 16:05:22
+ * @LastEditTime : 2025-04-01 18:52:47
  * @Description  : 存放日志存储功能相关参数设置以及定义等
  */
 
@@ -35,6 +35,6 @@ extern lfs_t lfs;
 
 void init_logStore_hardware(void);
 uint16_t mount_fs(void);
-void register_fs_ops(void);
+uint16_t get_file_count(void);
 
 #endif // !__LOG_STORE_H

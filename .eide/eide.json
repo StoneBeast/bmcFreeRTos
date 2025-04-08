@@ -7,9 +7,10 @@
     "Drivers",
     "Middlewares",
     "linkList",
-    "uartConsole",
     "ipmiTools",
-    "logStore"
+    "logStore",
+    "sysInterface",
+    "myTask"
   ],
   "virtualFolder": {
     "name": "<virtual_root>",
@@ -68,14 +69,15 @@
           "Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM3",
           "Drivers/CMSIS/Device/ST/STM32F1xx/Include",
           "Drivers/CMSIS/Include",
-          "uartConsole/inc",
           "linkList",
-          "uartConsole",
           "ipmiTools",
           "ipmiTools/inc",
           "logStore/littlefs",
           "logStore/w25qxDriver",
-          "logStore"
+          "logStore",
+          "sysInterface",
+          "sysInterface/inc",
+          "myTask"
         ],
         "libList": [],
         "defineList": [

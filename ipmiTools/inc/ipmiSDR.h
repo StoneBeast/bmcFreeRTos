@@ -119,5 +119,6 @@ unsigned char index_sdr(sdr_index_info_t* sdr_info);
 float reading_date_conversion(unsigned char* sdr_start_units1);
 char* get_val_str(unsigned char* sdr_start_units1);
 float data_conversion(short data, unsigned char* sdr_start_M);
+void get_M_K2(short *M, short *K2, unsigned char *sdr_start_units1);
 
 #endif // !__IPMI_SDR_H

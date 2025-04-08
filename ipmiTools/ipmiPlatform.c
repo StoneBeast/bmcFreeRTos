@@ -32,7 +32,6 @@ void __USER_IMPLEMENTATION init_ipmb_i2c(uint8_t local_addr)
 {
     /* init i2c */
     MX_I2C1_Init(local_addr);
-    HAL_I2C_EnableListen_IT(&hi2c1); 
 }
 
 uint8_t __USER_IMPLEMENTATION send_i2c_msg(uint8_t* msg, uint16_t len)
