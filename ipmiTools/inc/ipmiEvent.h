@@ -21,9 +21,9 @@ typedef struct {
     uint8_t sensor_no;
     uint8_t sensor_name_len;
     char sensor_name[16];
-    uint8_t min_val;
-    uint8_t read_val;
-    uint8_t max_val;
+    uint16_t min_val;
+    uint16_t read_val;
+    uint16_t max_val;
     short M;
     short K2;
     uint8_t unit_code;

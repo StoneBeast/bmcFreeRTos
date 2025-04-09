@@ -266,8 +266,8 @@ static void get_event(void)
     uint16_t msg_point = MSG_DATA_OFFSET;   /* 响应消息填充指针 */
 
     event_count = get_event_count();
-    ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 27);
-    memset(ret_msg, 0, MSG_FORMAT_LENGTH + 1 + event_count * 27);
+    ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 30);
+    memset(ret_msg, 0, MSG_FORMAT_LENGTH + 1 + event_count * 30);
 
     ret_msg[MSG_TYPE_OFFSET] = SYS_MSG_TYPE_RES;
     ret_msg[MSG_CODE_OFFSET] = SYS_EVENT_SENSOR_OVER;
@@ -281,12 +281,15 @@ static void get_event(void)
         data_len++;
         ret_msg[msg_point++] = temp_event.sensor_no;
         data_len++;
-        ret_msg[msg_point++] = temp_event.min_val;
-        data_len++;
-        ret_msg[msg_point++] = temp_event.max_val;
-        data_len++;
-        ret_msg[msg_point++] = temp_event.read_val;
-        data_len++;
+        memcpy(&(ret_msg[msg_point]), &(temp_event.min_val), 2);
+        msg_point += 2;
+        data_len += 2;
+        memcpy(&(ret_msg[msg_point]), &(temp_event.max_val), 2);
+        msg_point += 2;
+        data_len += 2;
+        memcpy(&(ret_msg[msg_point]), &(temp_event.read_val), 2);
+        msg_point += 2;
+        data_len += 2;
         memcpy(&(ret_msg[msg_point]), &(temp_event.M), 2);
         msg_point += 2;
         data_len += 2;
