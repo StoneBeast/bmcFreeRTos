@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-21 08:50:45
+ * @LastEditTime : 2025-04-09 15:03:12
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -122,6 +122,10 @@ uint32_t __USER_IMPLEMENTATION get_sys_ticks(void)
     return HAL_GetTick();
 }
 
+/* 
+    TODO: 如果传感器的数据是没有标准类型对应的有符号数，需要在此转换为标准类型，
+          例如读取到的数据为12位有符号，需要在此将其转换为16位有符号数，再向上进行传递。
+*/
 static void __USER_IMPLEMENTATION read_adc()
 {
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_data, 4);
@@ -129,25 +133,25 @@ static void __USER_IMPLEMENTATION read_adc()
     g_adc_conv_flag = 0;
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr1_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr1_sensor_data(void)
 {
     read_adc();
-    return adc_data[0]>>4;
+    return adc_data[0];
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr2_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr2_sensor_data(void)
 {
-    return adc_data[1]>>4;
+    return adc_data[1];
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr3_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr3_sensor_data(void)
 {
-    return adc_data[2]>>4;
+    return adc_data[2];
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void)
 {
-    return adc_data[3]>>4;
+    return adc_data[3];
 }
 
 // 侦听完成回调函数（完成一次完整的i2c通信以后会进入该函数）

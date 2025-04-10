@@ -82,12 +82,27 @@
 #define SDR_UCT_LEN	                        0x01
 #define SDR_UNCT_OFFSET	                    0x26
 #define SDR_UNCT_LEN	                    0x01
+
+/*
+    为了保证精度，将这些数据分别修改为Nominal Reading, Maximun, 和Minimumd高字节。
+    将数据提升为16位，同时也要根据SDR_SENSOR_UNITS_1位判断是否为有符号数。
+*/
+#if 0
 #define SDR_LNRT_OFFSET	                    0x27
 #define SDR_LNRT_LEN	                    0x01
 #define SDR_LCT_OFFSET	                    0x28
 #define SDR_LCT_LEN	                        0x01
 #define SDR_LNCT_OFFSET	                    0x29
 #define SDR_LNCT_LEN	                    0x01
+#else
+#define SDR_NORMAL_READING_HIGH_OFFSET     0X27
+#define SDR_NORMAL_READING_HIGH_LEN        0X01
+#define SDR_NORMAL_MAXIMUM_HIGH_OFFSET     0X28
+#define SDR_NORMAL_MAXIMUM_HIGH_LEN        0X01
+#define SDR_NORMAL_MINIMUM_HIGH_OFFSET     0X29
+#define SDR_NORMAL_MINIMUM_HIGH_LEN        0X01
+#endif //!0
+
 #define SDR_PGTH_VAL_OFFSET	                0x2A
 #define SDR_PGTH_VAL_LEN	                0x01
 #define SDR_NGTH_VAL_OFFSET	                0x2B

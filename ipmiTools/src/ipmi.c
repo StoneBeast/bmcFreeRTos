@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 17:10:16
+ * @LastEditTime : 2025-04-10 09:39:59
  * @Description  : ipmi功能实现
  */
 
@@ -447,12 +447,12 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
         /* 传感器编号 */
         temp_e.sensor_no = msg[RESPONSE_DATA_START+EVENT_BODY_SENSOR_NO_OFFSET];
         /* min, max, raw */
-        temp_e.min_val   = msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET];
-        temp_e.max_val    = msg[RESPONSE_DATA_START + EVENT_BODY_MAX_VAL_OFFSET];
-        temp_e.read_val   = msg[RESPONSE_DATA_START + EVENT_BODY_READ_VAL_OFFSET];
+        memcpy(&(temp_e.min_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET]), 2);
+        memcpy(&(temp_e.max_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_MAX_VAL_OFFSET]), 2);
+        memcpy(&(temp_e.read_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_READ_VAL_OFFSET]), 2);
 
         /* M, K2 */
-        get_M_K2(&(temp_e.M), &(temp_e.K2), &(msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET]));
+        get_M_K2(&(temp_e.M), &(temp_e.K2), &(msg[RESPONSE_DATA_START + 5]));
 
         /* unit code */
         temp_e.unit_code = msg[RESPONSE_DATA_START+EVENT_BODY_UNIT_CODE_OFFSET];
@@ -699,8 +699,8 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
 
 
     /* 这里把name的长度限制到了16Byte */
-    ret_data = malloc(1+sensor_num*24);
-    memset(ret_data, 0, 1+sensor_num*24);
+    ret_data = malloc(1+sensor_num*25);
+    memset(ret_data, 0, 1+sensor_num*25);
     ret_data[0] = sensor_num;
     temp_point = 1;
 
@@ -712,8 +712,9 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
         /* number 1Byte */
         ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_NUMBER_OFFSET];
 
-        /* raw data 1Byte */
+        /* raw data 2Byte */
         ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_OFFSET];
+        ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_HIGH_OFFSET];
 
         /* M 2Byte K 2Byte */
         get_M_K2(&temp_M, &temp_K2, &temp_res_data[2 + SDR_SENSOR_UNITS_1_OFFSET]);
@@ -775,10 +776,13 @@ static void get_fru_info(void)
  */
 static void update_sensor_data_task_func(void)
 {
-    uint8_t data[4];
-    uint8_t ht_data[2];
+    uint8_t temp_data = 0;
+    uint16_t data[4];
+    uint16_t ht_data[2];
     sensor_ev_t temp_p;
     uint8_t temp_sdr_U1[12];
+    uint8_t u1;
+    uint8_t is_over = 0;
 
     /* 读取传感器数据 */
     data[0] = read_sdr1_sensor_data();
@@ -789,11 +793,38 @@ static void update_sensor_data_task_func(void)
     for (uint8_t i = 0; i < 4; i++)
     {
         /* 向sdr更新数据 */
-        write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &(data[i]));
+        temp_data = (uint8_t)(data[i] & 0x00FF);
+        write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &temp_data);
+        temp_data = (uint8_t)((data[i] & 0xFF00) >> 8);
+        write_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_READING_HIGH_OFFSET, 1, &temp_data);
 
         /* 判断是否为正常数据 */
-        read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 2, ht_data);
-        if((data[i] < ht_data[1]) || (data[i] > ht_data[0]))
+        read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 1, &(((uint8_t*)&(ht_data[0]))[0]));
+        read_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_MAXIMUM_HIGH_OFFSET, 1, &(((uint8_t *)&(ht_data[0]))[1]));
+
+        read_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_MIN_READING_OFFSET, 1, &(((uint8_t *)&(ht_data[1]))[0]));
+        read_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_MINIMUM_HIGH_OFFSET, 1, &(((uint8_t *)&(ht_data[1]))[1]));
+
+        // TODO: 目前只考虑无符号和补码的情况
+        // FIXME:目前上位机无法判断数据形式，一律按照 short 类型处理  
+        read_flash((g_sdr_index.info[i].addr) + SDR_SENSOR_UNITS_1_OFFSET, 1, &u1);
+
+        if((u1&0xc0) == 0x00) {
+            if((data[i] < ht_data[1]) || (data[i] > ht_data[0]))
+                is_over = 1;
+            else {
+                is_over = 0;
+            }
+        }
+        else {
+            if (((short)(data[i]) < (short)(ht_data[1])) || ((short)(data[i]) > (short)(ht_data[0])))
+                is_over = 1;
+            else {
+                is_over = 0;
+            }
+        }
+
+        if(is_over)
         {
             /* 地址 */
             temp_p.addr = g_local_addr;

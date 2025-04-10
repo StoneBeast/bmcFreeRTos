@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 18:21:56
+ * @LastEditTime : 2025-04-09 11:03:02
  * @Description  : 
  */
 
@@ -158,6 +158,7 @@ static void read_file_handler(uint16_t file_index)
     char file_name[6] = {0};
     lfs_file_t log_file;
     lfs_ssize_t rb = 0;
+    lfs_soff_t file_size;
 
     /* 填充响应信息 */
     ret_msg = malloc(256);
@@ -167,27 +168,31 @@ static void read_file_handler(uint16_t file_index)
     /* 拼接文件名 */
     sprintf(file_name, "%04d", file_index);
     lfs_file_open(&lfs, &log_file, file_name, LFS_O_RDONLY);
+    file_size = lfs_file_size(&lfs, &log_file);
 
-    /* 每次读取 256-MSG_FORMAT_LENGTH-1 字节数据，如果实际读取的数据小于这个数字则说明文件读取完毕 */
+    /* 每次读取 256-MSG_FORMAT_LENGTH-1-4 字节数据，如果实际读取的数据小于这个数字则说明文件读取完毕 */
     do
     {
         memset(&(ret_msg[MSG_DATA_OFFSET]), 0, 256-MSG_FORMAT_LENGTH-1);
-        rb = lfs_file_read(&lfs, &log_file, &(ret_msg[MSG_DATA_OFFSET + 1]), 256 - MSG_FORMAT_LENGTH - 1);
 
-        if (rb == (256 - MSG_FORMAT_LENGTH - 1)) {
+        memcpy(&(ret_msg[MSG_DATA_OFFSET]), &file_size, 4);
+
+        rb = lfs_file_read(&lfs, &log_file, &(ret_msg[MSG_DATA_OFFSET + 1 +4]), 256 - MSG_FORMAT_LENGTH - 1 - 4);
+
+        if (rb == (256 - MSG_FORMAT_LENGTH - 1 - 4)) {
             /* data域第0个数据存放数据完结标志，0xFF代表未完结，0xAA则代表读取完毕 */
-            ret_msg[MSG_DATA_OFFSET] = 0xFF;
+            ret_msg[MSG_DATA_OFFSET+4] = 0xFF;
             *((uint16_t*)&(ret_msg[MSG_LEN_OFFSET]))  = (256 - MSG_FORMAT_LENGTH);
             ret_msg[255] = get_checksum(ret_msg, 256-1);
         } else {
-            ret_msg[MSG_DATA_OFFSET]                  = 0xAA;
-            *((uint16_t *)&(ret_msg[MSG_LEN_OFFSET])) = rb + 1;
-            ret_msg[MSG_FORMAT_LENGTH + rb - 1]       = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb - 1);
+            ret_msg[MSG_DATA_OFFSET+4]                = 0xAA;
+            *((uint16_t *)&(ret_msg[MSG_LEN_OFFSET])) = rb + 1 + 4;
+            ret_msg[MSG_FORMAT_LENGTH + rb - 1 + 4]   = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb - 1 + 4);
         }
 
         response(ret_msg, 256);
 
-    } while (rb == (256 - MSG_FORMAT_LENGTH - 1));
+    } while (rb == (256 - MSG_FORMAT_LENGTH - 1 - 4));
 
     /* 关闭文件，释放空间 */
     lfs_file_close(&lfs, &log_file);
@@ -259,29 +264,39 @@ static void get_event(void)
     uint8_t* ret_msg = NULL;                /* 返回消息 */
     uint16_t data_len = 0;                  /* 响应中data域的长度 */
     uint16_t msg_point = MSG_DATA_OFFSET;   /* 响应消息填充指针 */
+    uint8_t pop_count = 0;
 
     event_count = get_event_count();
-    ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 27);
-    memset(ret_msg, 0, MSG_FORMAT_LENGTH + 1 + event_count * 27);
+    ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 30);
+    memset(ret_msg, 0, MSG_FORMAT_LENGTH + 1 + event_count * 30);
 
     ret_msg[MSG_TYPE_OFFSET] = SYS_MSG_TYPE_RES;
     ret_msg[MSG_CODE_OFFSET] = SYS_EVENT_SENSOR_OVER;
-    ret_msg[msg_point]       = event_count;
-    data_len = 1;
+
+    if (event_count <= 8)
+        pop_count = event_count;
+    else {
+        pop_count = 8;
+    }
+    ret_msg[msg_point] = pop_count;
+    data_len           = 1;
     msg_point++;
 
-    for (uint8_t i = 0; i < event_count; i++) {
+    for (uint8_t i = 0; i < pop_count; i++) {
         pop_event(&temp_event);
         ret_msg[msg_point++] = temp_event.addr;
         data_len++;
         ret_msg[msg_point++] = temp_event.sensor_no;
         data_len++;
-        ret_msg[msg_point++] = temp_event.min_val;
-        data_len++;
-        ret_msg[msg_point++] = temp_event.max_val;
-        data_len++;
-        ret_msg[msg_point++] = temp_event.read_val;
-        data_len++;
+        memcpy(&(ret_msg[msg_point]), &(temp_event.min_val), 2);
+        msg_point += 2;
+        data_len += 2;
+        memcpy(&(ret_msg[msg_point]), &(temp_event.max_val), 2);
+        msg_point += 2;
+        data_len += 2;
+        memcpy(&(ret_msg[msg_point]), &(temp_event.read_val), 2);
+        msg_point += 2;
+        data_len += 2;
         memcpy(&(ret_msg[msg_point]), &(temp_event.M), 2);
         msg_point += 2;
         data_len += 2;

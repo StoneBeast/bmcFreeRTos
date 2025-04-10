@@ -56,7 +56,7 @@ static char* get_unit(uint8_t unit_code)
 static short get_M_B(uint8_t byte_L, uint8_t byte_H)
 {
     // 1. 提取高2位
-    uint8_t high_bits = (byte_H >> 6) & 0x03; 
+    uint16_t high_bits = byte_H & 0x03; 
 
     // 2. 组合为10位数值
     uint16_t combined = (high_bits << 8) | byte_L; 
