@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-09 14:08:16
+ * @LastEditTime : 2025-04-10 09:39:59
  * @Description  : ipmi功能实现
  */
 
@@ -447,12 +447,12 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
         /* 传感器编号 */
         temp_e.sensor_no = msg[RESPONSE_DATA_START+EVENT_BODY_SENSOR_NO_OFFSET];
         /* min, max, raw */
-        temp_e.min_val   = msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET];
-        temp_e.max_val    = msg[RESPONSE_DATA_START + EVENT_BODY_MAX_VAL_OFFSET];
-        temp_e.read_val   = msg[RESPONSE_DATA_START + EVENT_BODY_READ_VAL_OFFSET];
+        memcpy(&(temp_e.min_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET]), 2);
+        memcpy(&(temp_e.max_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_MAX_VAL_OFFSET]), 2);
+        memcpy(&(temp_e.read_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_READ_VAL_OFFSET]), 2);
 
         /* M, K2 */
-        get_M_K2(&(temp_e.M), &(temp_e.K2), &(msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET]));
+        get_M_K2(&(temp_e.M), &(temp_e.K2), &(msg[RESPONSE_DATA_START + 5]));
 
         /* unit code */
         temp_e.unit_code = msg[RESPONSE_DATA_START+EVENT_BODY_UNIT_CODE_OFFSET];
