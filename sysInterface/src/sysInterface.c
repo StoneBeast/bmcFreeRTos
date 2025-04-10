@@ -264,6 +264,7 @@ static void get_event(void)
     uint8_t* ret_msg = NULL;                /* 返回消息 */
     uint16_t data_len = 0;                  /* 响应中data域的长度 */
     uint16_t msg_point = MSG_DATA_OFFSET;   /* 响应消息填充指针 */
+    uint8_t pop_count = 0;
 
     event_count = get_event_count();
     ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 30);
@@ -271,11 +272,17 @@ static void get_event(void)
 
     ret_msg[MSG_TYPE_OFFSET] = SYS_MSG_TYPE_RES;
     ret_msg[MSG_CODE_OFFSET] = SYS_EVENT_SENSOR_OVER;
-    ret_msg[msg_point]       = event_count;
-    data_len = 1;
+
+    if (event_count <= 8)
+        pop_count = event_count;
+    else {
+        pop_count = 8;
+    }
+    ret_msg[msg_point] = pop_count;
+    data_len           = 1;
     msg_point++;
 
-    for (uint8_t i = 0; i < event_count; i++) {
+    for (uint8_t i = 0; i < pop_count; i++) {
         pop_event(&temp_event);
         ret_msg[msg_point++] = temp_event.addr;
         data_len++;

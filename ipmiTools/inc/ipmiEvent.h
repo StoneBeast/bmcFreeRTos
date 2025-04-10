@@ -3,7 +3,7 @@
  * @Date         : 2025-03-24 19:00:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-10 09:31:28
+ * @LastEditTime : 2025-04-10 10:41:03
  * @Description  : 
  */
 
@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-#define EVENT_MAX_COUNT                 15
+#define EVENT_MAX_COUNT                 20
 
 #define EVENT_BODY_ADDR_OFFSET          0
 #define EVENT_BODY_SENSOR_NO_OFFSET     1
