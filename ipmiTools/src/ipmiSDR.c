@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-03 14:48:54
+ * @LastEditTime : 2025-04-11 09:52:16
  * @Description  : SDR相关操作函数
  */
 
@@ -17,6 +17,8 @@
 #include "ipmiEvent.h"
 #include "link_list.h"
 #include "cmsis_os.h"
+
+extern unsigned char g_local_addr;
 
 /*** 
  * @brief 返回单位
@@ -170,6 +172,8 @@ uint8_t index_sdr(sdr_index_info_t* sdr_info)
 
     while (read_flash(start_addr, SDR_HEADER_LEN, sdr_head))
     {
+        write_flash(start_addr + SDR_SENSOR_OWNER_ID_OFFSET, 1, &g_local_addr);
+
         temp_id = ((uint16_t*)(sdr_head))[SDR_RECORD_ID_OFFSET];
         temp_len = sdr_head[SDR_RECORD_LEN_OFFSET] + SDR_HEADER_LEN;
         temp_sensor_num = sdr_head[SDR_SENSOR_NUMBER_OFFSET];
