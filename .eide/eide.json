@@ -10,7 +10,8 @@
     "ipmiTools",
     "logStore",
     "sysInterface",
-    "myTask"
+    "myTask",
+    "nct75Driver"
   ],
   "virtualFolder": {
     "name": "<virtual_root>",
@@ -77,7 +78,8 @@
           "logStore",
           "sysInterface",
           "sysInterface/inc",
-          "myTask"
+          "myTask",
+          "nct75Driver"
         ],
         "libList": [],
         "defineList": [
