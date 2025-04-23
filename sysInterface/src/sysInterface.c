@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-09 11:03:02
+ * @LastEditTime : 2025-04-23 09:55:53
  * @Description  : 
  */
 
@@ -28,6 +28,7 @@ static sys_req_t request_recv_buffer;           /* 接收请求buffer */
 static uint8_t send_buffer[BUFFER_LEN] = {0};   /* 发送响应的buffer，最大长度为 BUFFER_LEN */
 // TODO: 不确定是否要使用队列，消息缓冲区等也可以考虑
 QueueHandle_t sys_req_queue;                    /* 存放请求的队列 */
+QueueHandle_t ack_queue;
 
 /*** 
  * @brief 初始化系统接口使用到的硬件
@@ -49,13 +50,14 @@ void sys_request_handler(void)
     sys_req_t req; /* 接收请求 */
 
     sys_req_queue = xQueueCreate(2, sizeof(sys_req_t));
+    ack_queue = xQueueCreate(1, sizeof(sys_req_t));
 
     while (1)
     {
         xQueueReceive(sys_req_queue, &req, portMAX_DELAY);
 
-        if (check_msg(req.request_msg, req.request_len))    /* 请求数据损坏 */
-            continue;
+        // if (check_msg(req.request_msg, req.request_len))    /* 请求数据损坏 */
+        //     continue;
 
         if (req.request_msg[MSG_TYPE_OFFSET] == SYS_MSG_TYPE_REQ) {
             switch (req.request_msg[MSG_CODE_OFFSET]) {
@@ -159,6 +161,10 @@ static void read_file_handler(uint16_t file_index)
     lfs_file_t log_file;
     lfs_ssize_t rb = 0;
     lfs_soff_t file_size;
+    uint8_t retry_count = 0;
+    BaseType_t ack_ret = 0;
+    uint16_t pkg_index = 0;
+    sys_req_t req;
 
     /* 填充响应信息 */
     ret_msg = malloc(256);
@@ -176,21 +182,46 @@ static void read_file_handler(uint16_t file_index)
         memset(&(ret_msg[MSG_DATA_OFFSET]), 0, 256-MSG_FORMAT_LENGTH-1);
 
         memcpy(&(ret_msg[MSG_DATA_OFFSET]), &file_size, 4);
+        memcpy(&(ret_msg[MSG_DATA_OFFSET+4]), &pkg_index, 2);
 
-        rb = lfs_file_read(&lfs, &log_file, &(ret_msg[MSG_DATA_OFFSET + 1 +4]), 256 - MSG_FORMAT_LENGTH - 1 - 4);
+        /* pkg flah: 1Byte, pkg index: 2Byte, file size: 4Byte */
+        rb = lfs_file_read(&lfs, &log_file, &(ret_msg[MSG_DATA_OFFSET + 1 + 2 +4]), 256 - MSG_FORMAT_LENGTH - 1 -2 - 4);
 
-        if (rb == (256 - MSG_FORMAT_LENGTH - 1 - 4)) {
-            /* data域第0个数据存放数据完结标志，0xFF代表未完结，0xAA则代表读取完毕 */
-            ret_msg[MSG_DATA_OFFSET+4] = 0xFF;
+        if (rb == (256 - MSG_FORMAT_LENGTH - 1 - 2 - 4)) {
+            /* data域第6个数据存放数据完结标志，0xFF代表未完结，0xAA则代表读取完毕 */
+            ret_msg[MSG_DATA_OFFSET+6] = 0xFF;
             *((uint16_t*)&(ret_msg[MSG_LEN_OFFSET]))  = (256 - MSG_FORMAT_LENGTH);
             ret_msg[255] = get_checksum(ret_msg, 256-1);
         } else {
-            ret_msg[MSG_DATA_OFFSET+4]                = 0xAA;
-            *((uint16_t *)&(ret_msg[MSG_LEN_OFFSET])) = rb + 1 + 4;
-            ret_msg[MSG_FORMAT_LENGTH + rb - 1 + 4]   = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb - 1 + 4);
+            ret_msg[MSG_DATA_OFFSET+6]                = 0xAA;
+            *((uint16_t *)&(ret_msg[MSG_LEN_OFFSET])) = rb + 1 + 2 + 4;
+            ret_msg[MSG_FORMAT_LENGTH + rb - 1 + 2 + 4]   = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb - 1 +2 + 4);
         }
 
-        response(ret_msg, 256);
+        /* 先清空队列 */
+        xQueueReceive(ack_queue, &req, 0);
+
+SEND_FILE_PKG:
+
+    response(ret_msg, 256);
+    ack_ret = xQueueReceive(ack_queue, &req, 20 / portTICK_PERIOD_MS);
+    if (ack_ret == pdTRUE) { /* 有响应 */
+        if (0x06 == req.request_msg[MSG_DATA_OFFSET])
+            retry_count = 0;
+        else {
+            goto RETRY;
+        }
+    } else {    /* 没有响应，重新发送 */
+RETRY:
+        if (retry_count >= 3)   /* 超过重试次数，直接退出 */
+            break;
+        else {
+            retry_count ++;
+            goto SEND_FILE_PKG;
+        }
+      }
+
+        pkg_index++;
 
     } while (rb == (256 - MSG_FORMAT_LENGTH - 1 - 4));
 
@@ -338,6 +369,7 @@ static void response(uint8_t *res, uint16_t res_len)
 void USART1_IRQHandler(void)
 {
     char rc;
+    BaseType_t is_yield = pdFALSE;
 
     if (get_interface_uart_it_flag(SYSINTERFACE_IT_RXEN) != 0) {
         rc = get_interface_uart_data();
@@ -347,8 +379,18 @@ void USART1_IRQHandler(void)
 
     if (get_interface_uart_it_flag(SYSINTERFACE_IT_IDLE) != 0) /* idle中断触发，完成一帧数据帧接收 */
     {
-        xQueueSendFromISR(sys_req_queue, &request_recv_buffer, NULL);
+        if (0 == check_msg(request_recv_buffer.request_msg, request_recv_buffer.request_len)) {
+            if (request_recv_buffer.request_msg[0] == 0x03) {
+                xQueueSendFromISR(ack_queue, &request_recv_buffer, &is_yield);
+            } else {
+                xQueueSendFromISR(sys_req_queue, &request_recv_buffer, &is_yield);
+            }
+        }
+
         request_recv_buffer.request_len = 0;
         clear_interface_uart_idel_it_flag();
+
+        portYIELD_FROM_ISR(is_yield);
+        is_yield = pdTRUE;
     }
 }

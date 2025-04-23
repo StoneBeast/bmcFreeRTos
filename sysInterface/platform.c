@@ -46,6 +46,7 @@ void __USER clear_interface_uart_idel_it_flag(void)
     uint32_t temp;
     temp = huart1.Instance->SR;
     temp |= huart1.Instance->DR;
+    (void) temp;
 }
 
 void __USER interface_uart_send_data(uint8_t* data, uint16_t data_len)
