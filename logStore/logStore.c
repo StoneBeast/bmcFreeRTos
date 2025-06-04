@@ -3,7 +3,7 @@
  * @Date         : 2025-03-10 16:28:57
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 17:24:26
+ * @LastEditTime : 2025-06-04 15:08:08
  * @Description  : 日志存储功能功能函数
  */
 
@@ -52,7 +52,7 @@ uint16_t rx_buf_1_last_len          = 0;
 uint8_t current_buf                 = 0;    /* 记录当前接收的buffer */
 uint8_t start_flag                  = 0;    /* 接收开始标志位 */
 uint8_t end_flag                    = 0;    /* 接收结束标志位 */
-
+extern TaskHandle_t writeFile_task;
 /*** 
  * @brief 初始化日志记录功能使用到的硬件
  * @return [void]
@@ -64,6 +64,15 @@ void init_logStore_hardware(void)
 
     /* init log input uart */
     MX_USART3_UART_Init();
+}
+
+/*** 
+ * @brief 失能log串口接收中断
+ * @return [void]
+ */
+void disable_log_uart(void)
+{
+    __HAL_UART_DISABLE_IT(&huart3, UART_IT_RXNE);
 }
 
 /*** 
@@ -160,8 +169,10 @@ static void free_fs(void)
 void USART3_IRQHandler(void)
 {
     uint8_t rc;
-    if (start_flag == 0 && rx_buf_0_len == 0&& rx_buf_1_len == 0)
+    if (start_flag == 0 && rx_buf_0_len == 0&& rx_buf_1_len == 0) {
         start_flag = 1;
+        vTaskNotifyGiveFromISR(writeFile_task, NULL);
+    }
 
     HAL_UART_Receive(&huart3, &rc, 1, 100);
     if (start_flag == 1 && end_flag ==0 && fs_flag == 1)

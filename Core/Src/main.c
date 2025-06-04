@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-08 17:53:51
+ * @LastEditTime : 2025-06-04 16:12:07
  * @Description  : main.c
  */
 
@@ -67,6 +67,7 @@ StackType_t bg_Stack[880];     /* bgTask静态栈 */
 StackType_t req_Stack[880*2];   /* consoleTask静态栈 */
 StaticTask_t bg_TaskBuffer;    /* bgTask buffer */
 StaticTask_t req_TaskBuffer;     /* consoleTask buffer */
+TaskHandle_t writeFile_task;
 
 SemaphoreHandle_t uart_mutex;  /* uart访问互斥量 */
 
@@ -144,7 +145,7 @@ int main(void)
     /* 获取串口访问互斥量实例 */
     uart_mutex = xSemaphoreCreateMutex();
 
-    xTaskCreate(writeFile, "logStoage", 512, NULL, 5, NULL);
+    xTaskCreate(writeFile, "logStoage", 512, NULL, 5, &writeFile_task);
 
     /* USER CODE END 2 */
 
@@ -244,6 +245,7 @@ void writeFile(void *arg)
     char log_file_name[6];          /* log文件名 */
     int f_res;                      /* fs操作结果 */
     lfs_file_t log_file;            /* log文件实例 */
+    uint32_t wait_ret;
 
     /* 初始化该功能使用到的硬件 */
     init_logStore_hardware();
@@ -264,36 +266,44 @@ void writeFile(void *arg)
         }
 
         /* 等待开始 */
-        while (start_flag == 0);
-        PRINTF("start\r\n");
+        wait_ret = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WAIT_LOG_US));
+        if (wait_ret == 1) {
+            PRINTF("start\r\n");
 
-        while ((rx_buf_0_last_len != rx_buf_0_len || rx_buf_1_last_len != rx_buf_1_len) && (rx_buf_0_len + rx_buf_1_len) != 0) {
-            vTaskDelay(25/portTICK_PERIOD_MS);
-            /* 采用ping-pong buffer，接收和写入不使用同一个buffer */
-            if (current_buf == 0) {
-                current_buf       = 1;
-                rx_buf_0_last_len = rx_buf_0_len;
-                rx_buf_0_len      = 0;
-                lfs_file_write(&lfs, &log_file, rx_buf_0, rx_buf_0_last_len);
-            } else {
-                current_buf       = 0;
-                rx_buf_1_last_len = rx_buf_1_len;
-                rx_buf_1_len      = 0;
-                lfs_file_write(&lfs, &log_file, rx_buf_1, rx_buf_1_last_len);
+            while ((rx_buf_0_last_len != rx_buf_0_len || rx_buf_1_last_len != rx_buf_1_len) && (rx_buf_0_len + rx_buf_1_len) != 0) {
+                vTaskDelay(25 / portTICK_PERIOD_MS);
+                /* 采用ping-pong buffer，接收和写入不使用同一个buffer */
+                if (current_buf == 0) {
+                    current_buf       = 1;
+                    rx_buf_0_last_len = rx_buf_0_len;
+                    rx_buf_0_len      = 0;
+                    lfs_file_write(&lfs, &log_file, rx_buf_0, rx_buf_0_last_len);
+                } else {
+                    current_buf       = 0;
+                    rx_buf_1_last_len = rx_buf_1_len;
+                    rx_buf_1_len      = 0;
+                    lfs_file_write(&lfs, &log_file, rx_buf_1, rx_buf_1_last_len);
+                }
+                vTaskDelay(25 / portTICK_PERIOD_MS);
             }
-            vTaskDelay(25 / portTICK_PERIOD_MS);
+
+            /* 置位结束标志位 */
+            end_flag = 1;
+
+            lfs_file_close(&lfs, &log_file);
+            PRINTF("write finished\r\n");
+        } else {
+            //  timeout
+            lfs_file_close(&lfs, &log_file);
+            PRINTF("no log recv\r\n");
         }
-
-        /* 置位结束标志位 */
-        end_flag = 1;
-
-        lfs_file_close(&lfs, &log_file);
-        PRINTF("write finished\r\n");
 
     } else {
         PRINTF("mount fs failed\r\n");
     }
 
+    /* 关闭接收日志串口中断 */
+    disable_log_uart();
     /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
     xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 1, req_Stack, &req_TaskBuffer);
     xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
