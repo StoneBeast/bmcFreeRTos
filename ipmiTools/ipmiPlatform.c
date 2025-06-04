@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-09 15:03:12
+ * @LastEditTime : 2025-06-04 13:59:19
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -13,6 +13,8 @@
 #include "ipmiHardware.h"
 #include "ipmiConfig.h"
 #include "cmsis_os.h"
+
+#define MIN(a,b) (a>b?b:a)
 
 extern uint8_t add_msg_list(uint8_t* msg, uint16_t len);
 
@@ -97,6 +99,9 @@ uint8_t __USER_IMPLEMENTATION read_flash(uint16_t addr, uint8_t read_len, uint8_
 
 uint8_t __USER_IMPLEMENTATION write_flash(uint16_t addr, uint8_t write_len, uint8_t* data)
 {
+    uint16_t addr_p = addr;
+    uint8_t cr_write_count = 0;
+    uint8_t* pw_data = data;
     HAL_StatusTypeDef write_ret;
 
     /* 避免busy被错位置高导致总线锁死 */
@@ -110,9 +115,16 @@ uint8_t __USER_IMPLEMENTATION write_flash(uint16_t addr, uint8_t write_len, uint
         }
     }
 
-    write_ret = HAL_I2C_Mem_Write(&hi2c2, FLASH_ADDR_PADDR(addr), addr, 1, data, write_len, 100);
-    if (write_ret != HAL_OK)
-        return 0;
+    /* 初次写入并对齐 */
+    while (write_len > 0) {
+        cr_write_count = (AT24C16_PAGE_SIZE - (addr_p % AT24C16_PAGE_SIZE));
+        cr_write_count = MIN(cr_write_count, write_len);
+        write_ret = HAL_I2C_Mem_Write(&hi2c2, FLASH_ADDR_PADDR(addr_p), addr_p, 1, pw_data, cr_write_count, 100);
+        if (write_ret != HAL_OK)
+            return 0;
+        write_len -= cr_write_count;
+        addr_p += cr_write_count;
+    }
 
     return 1;
 }

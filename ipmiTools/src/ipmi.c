@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-10 09:39:59
+ * @LastEditTime : 2025-06-04 13:45:15
  * @Description  : ipmi功能实现
  */
 
@@ -47,6 +47,7 @@ uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
 static void update_sensor_data_task_func(void);
+static void verify_sdr(void);
 
 /*** 
  * @brief 获取本地地址
@@ -242,6 +243,7 @@ uint8_t init_bmc(void)
         return 0;
 
     init_sensor();
+    verify_sdr();
     get_fru_info();
     index_sdr(&g_sdr_index);
     ipmi_request_manager = link_list_manager_get();
@@ -858,6 +860,49 @@ static void update_sensor_data_task_func(void)
         }
     }
 
+}
+
+/*** 
+ * @brief 验证sdr数据，错误时重新sdr数据
+ * @return [void]
+ */
+static void verify_sdr(void)
+{
+    // TODO: 在宏定义中指定位置，暂定为flash最后一个字节
+    // TODO: 校验码 == (传感器数量+sum(传感器type code))%0xFF
+    uint8_t sdr_count = SENSOR_COUNT;
+    uint8_t verify_code = 0;
+    uint8_t temp_date = 0;
+    uint8_t sdr_buf[SDR_MAX_LEN] = {0};
+    uint8_t sensor_type[SENSOR_COUNT] = {0x02, 0x02, 0x02, 0x08};
+    uint16_t sdr_addr = 0;
+
+    verify_code = sdr_count;
+    for (uint8_t i = 0; i < sdr_count; i++)
+    {
+        verify_code += sensor_type[i];
+    }
+    verify_code %= 0xFF;
+
+    /* 读数据 */
+    read_flash(0x07FF, 1, &temp_date);
+    /* 比较数据 */
+    if (temp_date == verify_code) 
+        return;
+
+    /* 生成并写入sdr */
+    GENGRATE_SDR_DATA(sdr_buf, 0x01, 0x01, 0x61, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, "ADC01");
+    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
+    sdr_addr += SDR_MAX_LEN;
+    GENGRATE_SDR_DATA(sdr_buf, 0x02, 0x02, 0x62, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, "ADC02");
+    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
+    sdr_addr += SDR_MAX_LEN;
+    GENGRATE_SDR_DATA(sdr_buf, 0x03, 0x03, 0x63, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, "ADC03");
+    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
+    sdr_addr += SDR_MAX_LEN;
+    GENGRATE_SDR_DATA(sdr_buf, 0x04, 0x04, 0x64, SENSOR_TYPE_POWER, 0x05, 0x42, 0x01, 0xB0, "ADC04");
+    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
+    write_flash(0x07FF, 1, &verify_code);
 }
 
 #if 0

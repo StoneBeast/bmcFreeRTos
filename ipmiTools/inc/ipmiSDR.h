@@ -118,6 +118,31 @@
 #define GET_SDR_INFO_RES_LEN                6
 #define GET_SDR_REQ_LEN                     6
 
+#define SDR_MAX_LEN                         4*16
+#define SDR_VERIFY                          0x7FF
+#define SENSOR_TYPE_TEMPERATURE             0x01
+#define SENSOR_TYPE_VOLTAGE                 0x02
+#define SENSOR_TYPE_POWER                   0x08
+
+
+#define GENGRATE_SDR_DATA(sdr_buf, id, sen_no, ent_i, type, units_code, M, MT, R_B, id_str)                             \
+    {                                                                                                                   \
+        memset(sdr_buf, 0, SDR_MAX_LEN);                                                                                \
+        sdr_buf[0] = (id&0x00FF);   \
+        sdr_buf[1] = ((id>>8)&0x00FF);   \
+        sdr_buf[SDR_ID_SRT_TYPE_LEN_OFFSET] = strlen(id_str);                                                           \
+        sdr_buf[SDR_RECORD_LEN_OFFSET]      = (3 * 16 + sdr_buf[SDR_ID_SRT_TYPE_LEN_OFFSET] - SDR_HEADER_LEN); \
+        sdr_buf[SDR_KEY_OFFSET]             = g_local_addr;                                                             \
+        sdr_buf[SDR_SENSOR_NUMBER_OFFSET]   = sen_no;                                                                   \
+        sdr_buf[SDR_ENTITY_INSTANCE_OFFSET] = ent_i;                                                                    \
+        sdr_buf[SDR_SENSOR_TYPE_OFFSET]     = type;                                                                     \
+        sdr_buf[SDR_SENSOR_UNITS_2_OFFSET]  = units_code;                                                               \
+        sdr_buf[SDR_M_OFFSET]               = M;                                                                        \
+        sdr_buf[SDR_M_TOLERANCE_OFFSET]     = MT;                                                                       \
+        sdr_buf[SDR_R_B_EXP_OFFSET]         = R_B;                                                                      \
+        memcpy((sdr_buf + SDR_ID_STR_BYTE_OFFSET), id_str, sdr_buf[SDR_ID_SRT_TYPE_LEN_OFFSET]);                        \
+    }
+
 typedef struct {
     unsigned short id;
     unsigned short addr;
