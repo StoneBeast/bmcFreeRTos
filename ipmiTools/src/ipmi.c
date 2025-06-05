@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-04 13:45:15
+ * @LastEditTime : 2025-06-05 14:57:51
  * @Description  : ipmi功能实现
  */
 
@@ -19,6 +19,7 @@
 #include "ipmiEvent.h"
 #include "cmsis_os.h"
 #include "my_task.h"
+#include <stdio.h>
 
 //  TODO: 释放rqSeq功能
 
@@ -799,9 +800,11 @@ static void update_sensor_data_task_func(void)
     if (debug_read == 1) {
         for (uint8_t i = 0; i < 4; i++)
         {
-            PRINTF("ADC%d: %.3fv\n", i, ((float)(data[i]))/4096*3.3);
+            // PRINTF("ADC%d: %.3fv\n", i, ((float)(data[i]))/4096*3.3);
+            printf("A");
+            printf("ADC%d: %.3fv\r\n", i, ((float)(data[i]))/4096*3.3);
         }
-        PRINTF("\n");
+        printf("\r\n");
     }
 #endif // !USE_DEBUG_CMD == 1
 

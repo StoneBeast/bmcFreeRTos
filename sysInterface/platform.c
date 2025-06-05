@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:28:11
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-01 14:45:01
+ * @LastEditTime : 2025-06-05 16:22:49
  * @Description  : 
  */
 
@@ -11,6 +11,7 @@
 #include "stm32f1xx_hal.h"
 #include "gpio.h"
 #include "usart.h"
+#include <stdio.h>
 
 void __USER init_status_led(void)
 {
@@ -52,4 +53,10 @@ void __USER clear_interface_uart_idel_it_flag(void)
 void __USER interface_uart_send_data(uint8_t* data, uint16_t data_len)
 {
     HAL_UART_Transmit(&huart1, data, data_len, 100);
+}
+
+int _write(int fd, char *ptr, int len)
+{
+    interface_uart_send_data(ptr, len);
+    return len;
 }
