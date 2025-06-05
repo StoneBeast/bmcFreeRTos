@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-23 09:55:53
+ * @LastEditTime : 2025-06-05 13:43:15
  * @Description  : 
  */
 
@@ -29,6 +29,10 @@ static uint8_t send_buffer[BUFFER_LEN] = {0};   /* 发送响应的buffer，最�
 // TODO: 不确定是否要使用队列，消息缓冲区等也可以考虑
 QueueHandle_t sys_req_queue;                    /* 存放请求的队列 */
 QueueHandle_t ack_queue;
+
+#if USE_DEBUG_CMD == 1
+volatile uint8_t debug_read = 0;
+#endif // !USE_DEBUG_CMD == 1
 
 /*** 
  * @brief 初始化系统接口使用到的硬件
@@ -84,6 +88,24 @@ void sys_request_handler(void)
                     break;
             }
         }
+#if USE_DEBUG_CMD == 1
+        else if (0 == memcmp(req.request_msg, DEBUG_CMD_PREFIX, strlen(DEBUG_CMD_PREFIX))) {
+            /* 使用调试命令 */
+            switch (*((req.request_msg)+strlen(DEBUG_CMD_PREFIX)))
+            {
+            case DEBUG_CMD_READ_AD: /* 循环上报AD值 */
+                /* 这里可以通过向任务链表注册新的定时任务实现，但是需要额外实现删除的功能 */
+                if (debug_read == 1)
+                    debug_read = 0;
+                else
+                    debug_read = 1;
+                break;
+            
+            default:
+                break;
+            }
+        }
+#endif // !USE_DEBUG_CMD == 1
     }
 }
 
@@ -115,6 +137,11 @@ static uint8_t get_checksum(const uint8_t *msg, uint16_t msg_len)
 static uint8_t check_msg(const uint8_t *msg, uint16_t msg_len)
 {
     uint8_t sum = 0;
+
+#if USE_DEBUG_CMD == 1
+    if (0 == memcmp(msg, DEBUG_CMD_PREFIX, strlen(DEBUG_CMD_PREFIX)))
+        return 0;
+#endif // !USE_DEBUG_CMD == 1
 
     for (uint16_t i = 0; i < msg_len; i++)
         sum += msg[i];

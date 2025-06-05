@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-11 09:52:16
+ * @LastEditTime : 2025-06-05 11:15:10
  * @Description  : SDR相关操作函数
  */
 
@@ -117,6 +117,7 @@ float reading_date_conversion(uint8_t* sdr_start_units1)
     
     /* 这里省略判断unit1中关于data的位的标志位，默认为无符号 */
     raw_value = (short)(sdr_start_units1[11]);
+    raw_value |= (short)(((short)(sdr_start_units1[19]))<<8);
 
     data = data_conversion(raw_value, &(sdr_start_units1[4]));
 

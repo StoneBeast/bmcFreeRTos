@@ -40,6 +40,9 @@ static uint8_t event_count = 0;
 static uint8_t event_arr_p = 0;
 
 extern link_list_manager *g_timer_task_manager;
+#if USE_DEBUG_CMD == 1
+extern volatile uint8_t debug_read;
+#endif // !USE_DEBUG_CMD == 1
 
 uint8_t* scan_device(uint16_t* device_count);
 static void get_fru_info(void);
@@ -779,7 +782,7 @@ static void get_fru_info(void)
 static void update_sensor_data_task_func(void)
 {
     uint8_t temp_data = 0;
-    uint16_t data[4];
+    uint16_t data[SENSOR_COUNT];
     uint16_t ht_data[2];
     sensor_ev_t temp_p;
     uint8_t temp_sdr_U1[12];
@@ -792,8 +795,17 @@ static void update_sensor_data_task_func(void)
     data[2] = read_sdr3_sensor_data();
     data[3] = read_sdr4_sensor_data();
 
-    for (uint8_t i = 0; i < 4; i++)
-    {
+#if USE_DEBUG_CMD == 1
+    if (debug_read == 1) {
+        for (uint8_t i = 0; i < 4; i++)
+        {
+            PRINTF("ADC%d: %.3fv\n", i, ((float)(data[i]))/4096*3.3);
+        }
+        PRINTF("\n");
+    }
+#endif // !USE_DEBUG_CMD == 1
+
+    for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
         /* 向sdr更新数据 */
         temp_data = (uint8_t)(data[i] & 0x00FF);
         write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &temp_data);
@@ -859,7 +871,6 @@ static void update_sensor_data_task_func(void)
             push_event(temp_p);
         }
     }
-
 }
 
 /*** 
