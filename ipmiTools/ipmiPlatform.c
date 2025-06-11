@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-04 13:59:19
+ * @LastEditTime : 2025-06-11 14:59:59
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -13,6 +13,7 @@
 #include "ipmiHardware.h"
 #include "ipmiConfig.h"
 #include "cmsis_os.h"
+#include "nct75.h"
 
 #define MIN(a,b) (a>b?b:a)
 
@@ -24,6 +25,7 @@ extern unsigned short g_ipmb_msg_len;
 extern unsigned char g_local_addr;
 extern volatile uint8_t g_adc_conv_flag;
 uint16_t adc_data[6] = {0};
+nct75_t nct75_0, nct75_1;
 
 unsigned char __USER_IMPLEMENTATION read_GA_Pin(void)
 {
@@ -73,6 +75,12 @@ void __USER_IMPLEMENTATION init_adc(void)
 void __USER_IMPLEMENTATION init_inter_bus(void)
 {
     MX_I2C2_Init();
+}
+
+void __USER_IMPLEMENTATION init_temp_sensor(void)
+{
+    simple_init_nct75(&nct75_0, 0x48, 0);
+    simple_init_nct75(&nct75_0, 0x4A, 0);
 }
 
 uint8_t __USER_IMPLEMENTATION read_flash(uint16_t addr, uint8_t read_len, uint8_t* data)
@@ -164,6 +172,16 @@ uint16_t __USER_IMPLEMENTATION read_sdr3_sensor_data(void)
 uint16_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void)
 {
     return adc_data[3];
+}
+
+uint16_t __USER_IMPLEMENTATION read_sdr5_sensor_data(void)
+{
+    return nct75_read_rawData(&nct75_0);
+}
+
+uint16_t __USER_IMPLEMENTATION read_sdr6_sensor_data(void)
+{
+    return nct75_read_rawData(&nct75_1);
 }
 
 // 侦听完成回调函数（完成一次完整的i2c通信以后会进入该函数）

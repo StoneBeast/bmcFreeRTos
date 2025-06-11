@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-05 14:57:51
+ * @LastEditTime : 2025-06-11 14:36:53
  * @Description  : ipmi功能实现
  */
 
@@ -88,6 +88,7 @@ static uint8_t init_sensor(void)
     /* 初始化adc */
     init_adc();
     init_inter_bus();
+    init_temp_sensor();
     return 1;
 }
 
@@ -795,6 +796,8 @@ static void update_sensor_data_task_func(void)
     data[1] = read_sdr2_sensor_data();
     data[2] = read_sdr3_sensor_data();
     data[3] = read_sdr4_sensor_data();
+    data[4] = read_sdr5_sensor_data();
+    data[5] = read_sdr6_sensor_data();
 
 #if USE_DEBUG_CMD == 1
     if (debug_read == 1) {
@@ -888,7 +891,10 @@ static void verify_sdr(void)
     uint8_t verify_code = 0;
     uint8_t temp_date = 0;
     uint8_t sdr_buf[SDR_MAX_LEN] = {0};
-    uint8_t sensor_type[SENSOR_COUNT] = {0x02, 0x02, 0x02, 0x08};
+    uint8_t sensor_type[SENSOR_COUNT] = {SENSOR_TYPE_VOLTAGE,
+                                         SENSOR_TYPE_VOLTAGE, SENSOR_TYPE_VOLTAGE,
+                                         SENSOR_TYPE_POWER, SENSOR_TYPE_TEMPERATURE,
+                                         SENSOR_TYPE_TEMPERATURE};
     uint16_t sdr_addr = 0;
 
     verify_code = sdr_count;
@@ -904,17 +910,24 @@ static void verify_sdr(void)
     if (temp_date == verify_code) 
         return;
 
+    //TODO: 考虑将M，MT两个属性合成M，将M扩大为16位有符号数
     /* 生成并写入sdr */
-    GENGRATE_SDR_DATA(sdr_buf, 0x01, 0x01, 0x61, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, "ADC01");
+    GENGRATE_SDR_DATA(sdr_buf, 0x01, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, 0x0fff, 0x0001, "ADC01");
     write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
     sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x02, 0x02, 0x62, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, "ADC02");
+    GENGRATE_SDR_DATA(sdr_buf, 0x02, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, 0x0fff, 0x0001, "ADC02");
     write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
     sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x03, 0x03, 0x63, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, "ADC03");
+    GENGRATE_SDR_DATA(sdr_buf, 0x03, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, 0x0fff, 0x0001, "ADC03");
     write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
     sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x04, 0x04, 0x64, SENSOR_TYPE_POWER, 0x05, 0x42, 0x01, 0xB0, "ADC04");
+    GENGRATE_SDR_DATA(sdr_buf, 0x04, SENSOR_TYPE_POWER, 0x05, 0x42, 0x01, 0xB0, 0x0fff, 0x0001, "ADC04");
+    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
+    sdr_addr += SDR_MAX_LEN;
+    GENGRATE_SDR_DATA(sdr_buf, 0x05, SENSOR_TYPE_TEMPERATURE, 0x01, 0x3E, 0, 0xA0, 0x0fff, 0x8001, "NCT01");
+    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
+    sdr_addr += SDR_MAX_LEN;
+    GENGRATE_SDR_DATA(sdr_buf, 0x06, SENSOR_TYPE_TEMPERATURE, 0x01, 0x3E, 0, 0xA0, 0x0fff, 0x8001, "NCT02");
     write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
     write_flash(0x07FF, 1, &verify_code);
 }

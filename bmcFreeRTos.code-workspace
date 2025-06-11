@@ -12,6 +12,7 @@
             "*.cjson": "jsonc",
             "*.wxss": "css",
             "*.wxs": "javascript",
+            "*.doc": "docx",
             ".eideignore": "ignore",
             "*.a51": "a51",
             "*.h": "c",
@@ -22,7 +23,10 @@
             "*.cpp": "cpp",
             "*.cxx": "cpp",
             "*.cc": "cpp",
-            "cstdlib": "c"
+            "cstdlib": "c",
+            "compare": "c",
+            "type_traits": "c",
+            "limits": "c"
         },
         "[yaml]": {
             "editor.insertSpaces": true,

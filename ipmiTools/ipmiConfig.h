@@ -7,7 +7,7 @@
 #define IS_IPMC
 #endif // DEBUG
 
-#define SENSOR_COUNT    4
+#define SENSOR_COUNT    6
 #define SLOT_COUNT 8
 #define SDR_MAX_COUNT   10
 #define AT24C16_PAGE_SIZE 16
