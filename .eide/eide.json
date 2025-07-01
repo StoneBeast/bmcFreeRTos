@@ -43,7 +43,7 @@
       "uploadConfig": {
         "bin": "",
         "target": "stm32f1x",
-        "interface": "stlink",
+        "interface": "${workspaceFolder}/.eide/jlink",
         "baseAddr": "0x08000000"
       },
       "uploadConfigMap": {
@@ -51,11 +51,28 @@
           "bin": "",
           "baseAddr": "",
           "cpuInfo": {
-            "vendor": "null",
-            "cpuName": "null"
+            "vendor": "ST",
+            "cpuName": "STM32F103RC"
           },
           "proType": 1,
-          "speed": 8000,
+          "speed": 5000,
+          "otherCmds": ""
+        },
+        "OpenOCD": {
+          "bin": "",
+          "target": "stm32f1x",
+          "interface": "${workspaceFolder}/.eide/jlink",
+          "baseAddr": "0x08000000"
+        },
+        "STLink": {
+          "bin": "",
+          "proType": "SWD",
+          "resetMode": "default",
+          "runAfterProgram": true,
+          "speed": 4000,
+          "address": "0x08000000",
+          "elFile": "None",
+          "optionBytes": ".eide/debug.st.option.bytes.ini",
           "otherCmds": ""
         }
       },
@@ -103,18 +120,14 @@
             "optimization": "level-debug",
             "warnings": "all-warnings",
             "one-elf-section-per-function": true,
-            "one-elf-section-per-data": true,
-            "C_FLAGS": "",
-            "CXX_FLAGS": ""
+            "one-elf-section-per-data": true
           },
-          "asm-compiler": {
-            "ASM_FLAGS": ""
-          },
+          "asm-compiler": {},
           "linker": {
             "output-format": "elf",
             "remove-unused-input-sections": true,
-            "LD_FLAGS": "",
-            "LIB_FLAGS": "-lm -u _printf_float"
+            "LIB_FLAGS": "-lm -u _printf_float",
+            "$toolName": "auto"
           }
         }
       }
