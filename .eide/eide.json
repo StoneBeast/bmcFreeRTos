@@ -39,12 +39,17 @@
         },
         "options": "null"
       },
-      "uploader": "OpenOCD",
+      "uploader": "JLink",
       "uploadConfig": {
         "bin": "",
-        "target": "stm32f1x",
-        "interface": "${workspaceFolder}/.eide/jlink",
-        "baseAddr": "0x08000000"
+        "baseAddr": "",
+        "cpuInfo": {
+          "vendor": "ST",
+          "cpuName": "STM32F103RC"
+        },
+        "proType": 1,
+        "speed": 5000,
+        "otherCmds": ""
       },
       "uploadConfigMap": {
         "JLink": {
@@ -60,8 +65,8 @@
         },
         "OpenOCD": {
           "bin": "",
-          "target": "stm32f1x",
-          "interface": "${workspaceFolder}/.eide/jlink",
+          "target": "${workspaceFolder}/.eide/stm32f1x",
+          "interface": "${workspaceFolder}/.eide/stlink",
           "baseAddr": "0x08000000"
         },
         "STLink": {
