@@ -15,7 +15,7 @@
 #define FLASH_I2C_BASS_ADDR 0x50
 #define FLASH_ADDR_PADDR(w_addr)    ((uint8_t)((FLASH_I2C_BASS_ADDR|((w_addr>>8) & 0x0007))<<1))
 
-#define USE_DEBUG_CMD   1
+#define USE_DEBUG_CMD   0
 #define DEBUG_CMD_PREFIX    "debug_cmd "
 #define DEBUG_CMD_READ_AD   'A'
 #endif // !__IPMI_CONFIG_H

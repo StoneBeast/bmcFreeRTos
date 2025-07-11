@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:34:45
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-04-02 10:54:11
+ * @LastEditTime : 2025-07-11 18:20:40
  * @Description  : 
  */
 #ifndef __SYS_INTERFACE_DEF_H
@@ -23,7 +23,7 @@
 #define MSG_LEN_LENGTH      2
 #define MSG_DATA_OFFSET     4
 #define MSG_DATA_LENGTH     1
-#define MSG_FORMAT_LENGTH   6
+#define MSG_FORMAT_LENGTH   5
 #define MSG_FILE_PKG_FILE_SIZE_OFFSET       MSG_DATA_OFFSET
 #define MSG_FILE_PKG_FILE_SIZE_LEN          4
 #define MSG_FILE_PKG_PKG_INDEX_OFFSET       (MSG_DATA_OFFSET + MSG_FILE_PKG_FILE_SIZE_LEN)

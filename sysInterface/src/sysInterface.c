@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-10 10:18:05
+ * @LastEditTime : 2025-07-11 19:09:40
  * @Description  : 
  */
 
@@ -15,7 +15,7 @@
 #include <string.h>
 #include "bmc.h"
 
-static uint16_t get_checksum(const uint8_t *msg, uint16_t msg_len);
+static uint8_t get_checksum(const uint8_t *msg, uint16_t msg_len);
 static uint8_t check_msg(const uint8_t *msg, uint16_t msg_len);
 static void get_file_list_handler(void);
 static void read_file_handler(uint16_t file_index);
@@ -112,15 +112,15 @@ void sys_request_handler(void)
  * @param msg_len [uint16_t]    消息长度
  * @return [uint8_t]            校验和
  */
-static uint16_t get_checksum(const uint8_t *msg, uint16_t msg_len)
+static uint8_t get_checksum(const uint8_t *msg, uint16_t msg_len)
 {
     uint16_t sum = 0;
-    uint16_t chk = 0;
+    uint8_t chk = 0;
 
     for (uint16_t i = 0; i < msg_len; i++)
         sum += msg[i];
 
-    chk = ((0x10000 - sum) % 0x10000);
+    chk = (0x100 - sum % 0x100);
 
     return chk;
 }
@@ -143,7 +143,7 @@ static uint8_t check_msg(const uint8_t *msg, uint16_t msg_len)
     for (uint16_t i = 0; i < msg_len; i++)
         sum += msg[i];
 
-    if (sum % 0x10000 != 0)
+    if (sum % 0x100 != 0)
         return 1;
 
     return 0;
@@ -159,7 +159,6 @@ static void get_file_list_handler(void)
     /* 获取最大文件编号 */
     uint16_t file_count = get_file_count();
     uint16_t length = MSG_FORMAT_LENGTH + 2;
-    uint16_t chk;
 
     ret_msg = malloc(length);
 
@@ -168,8 +167,7 @@ static void get_file_list_handler(void)
     ret_msg[MSG_LEN_OFFSET]  = 2;
     memcpy(&ret_msg[MSG_DATA_OFFSET], &file_count, 2);
     
-    chk = get_checksum(ret_msg, length - 2);
-    memcpy(&(ret_msg[length - 1]), &chk, 2);
+    ret_msg[length - 1] = get_checksum(ret_msg, length - 1);
     response(ret_msg, length);
     /* 释放ret_msg */
     free(ret_msg);
@@ -191,7 +189,6 @@ static void read_file_handler(uint16_t file_index)
     BaseType_t ack_ret = 0;
     uint16_t pkg_index = 0;
     sys_req_t req;
-    uint16_t chk;
 
     /* 填充响应信息 */
     ret_msg = malloc(256);
@@ -218,13 +215,14 @@ static void read_file_handler(uint16_t file_index)
             /* data域第6个数据存放数据完结标志，0xFF代表未完结，0xAA则代表读取完毕 */
             ret_msg[MSG_FILE_PKG_PKG_FLAG_OFFSET] = 0xFF;
             *((uint16_t*)&(ret_msg[MSG_LEN_OFFSET]))  = (uint16_t)(256 - MSG_FORMAT_LENGTH);
-            chk = get_checksum(ret_msg, 256-2);
-            memcpy(&(ret_msg[254]), &chk, 2);
+            // chk = get_checksum(ret_msg, 256-2);
+            ret_msg[255] = get_checksum(ret_msg, 256-1);
         } else {
             ret_msg[MSG_FILE_PKG_PKG_FLAG_OFFSET]     = 0xAA;
             *((uint16_t *)&(ret_msg[MSG_LEN_OFFSET])) = (uint16_t)(rb + MSG_FILE_PKG_FILE_SIZE_LEN + MSG_FILE_PKG_PKG_INDEX_LEN + MSG_FILE_PKG_PKG_FLAG_LEN + MSG_FILE_PKG_PKG_DATA_LEN_LEN);
-            chk = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb + MSG_FILE_PKG_FILE_SIZE_LEN + MSG_FILE_PKG_PKG_INDEX_LEN + MSG_FILE_PKG_PKG_FLAG_LEN + MSG_FILE_PKG_PKG_DATA_LEN_LEN);
-            memcpy(&(ret_msg[MSG_FILE_PKG_PKG_DATA_OFFSET+ rb]), &chk, 2);
+            // chk = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb + MSG_FILE_PKG_FILE_SIZE_LEN + MSG_FILE_PKG_PKG_INDEX_LEN + MSG_FILE_PKG_PKG_FLAG_LEN + MSG_FILE_PKG_PKG_DATA_LEN_LEN);
+            // memcpy(&(ret_msg[MSG_FILE_PKG_PKG_DATA_OFFSET+ rb]), &chk, 2);
+            ret_msg[MSG_FILE_PKG_PKG_DATA_OFFSET+ rb] = get_checksum(ret_msg, MSG_FORMAT_LENGTH + rb + MSG_FILE_PKG_FILE_SIZE_LEN + MSG_FILE_PKG_PKG_INDEX_LEN + MSG_FILE_PKG_PKG_FLAG_LEN + MSG_FILE_PKG_PKG_DATA_LEN_LEN);
         }
 
         /* 先清空队列 */
@@ -268,7 +266,6 @@ static void get_card_list_handler(void)
     uint8_t* card_addr_list = NULL;
     uint16_t card_count = 0;
     uint8_t* ret_msg = NULL;
-    uint16_t chk;
 
     card_addr_list = scan_device(&card_count);
     ret_msg = malloc(MSG_FORMAT_LENGTH+1+card_count);
@@ -280,8 +277,8 @@ static void get_card_list_handler(void)
     ret_msg[MSG_DATA_OFFSET] = card_count;
     memcpy(&(ret_msg[MSG_DATA_OFFSET+1]), card_addr_list, card_count);
 
-    chk = get_checksum(ret_msg, MSG_FORMAT_LENGTH + 1 + card_count -1);
-    memcpy(&(ret_msg[MSG_FORMAT_LENGTH + 1 + card_count - 1]), &chk, 2);
+    ret_msg[MSG_FORMAT_LENGTH + 1 + card_count - 1] = get_checksum(ret_msg, MSG_FORMAT_LENGTH + 1 + card_count -1);
+    // memcpy(&(ret_msg[MSG_FORMAT_LENGTH + 1 + card_count - 1]), &chk, 2);
 
     free(card_addr_list);
 
@@ -299,7 +296,7 @@ static void get_sensor_list_handler(uint8_t ipmi_addr)
     uint8_t* ret_msg = NULL;
     uint8_t* sensor_list = NULL;
     uint16_t sensor_list_len = 0;
-    uint16_t chk;
+    // uint16_t chk;
 
     sensor_list = get_sensor_list(ipmi_addr, &sensor_list_len);
     ret_msg = malloc(MSG_FORMAT_LENGTH+sensor_list_len);
@@ -311,8 +308,8 @@ static void get_sensor_list_handler(uint8_t ipmi_addr)
     memcpy(&(ret_msg[MSG_DATA_OFFSET]), sensor_list, sensor_list_len);
 
     free(sensor_list);
-    chk = get_checksum(ret_msg, MSG_DATA_OFFSET + sensor_list_len);
-    memcpy(&(ret_msg[MSG_DATA_OFFSET + sensor_list_len]), &chk, 2);
+    ret_msg[MSG_DATA_OFFSET + sensor_list_len] = get_checksum(ret_msg, MSG_DATA_OFFSET + sensor_list_len);
+    // memcpy(&(ret_msg[MSG_DATA_OFFSET + sensor_list_len]), &chk, 2);
     response(ret_msg, MSG_FORMAT_LENGTH+sensor_list_len);
     free(ret_msg);
 }
@@ -329,7 +326,6 @@ static void get_event(void)
     uint16_t data_len = 0;                  /* 响应中data域的长度 */
     uint16_t msg_point = MSG_DATA_OFFSET;   /* 响应消息填充指针 */
     uint8_t pop_count = 0;
-    uint16_t chk;
 
     event_count = get_event_count();
     ret_msg     = malloc(MSG_FORMAT_LENGTH + 1 + event_count * 30);
@@ -377,8 +373,8 @@ static void get_event(void)
         data_len += temp_event.sensor_name_len;
     }
     memcpy(&(ret_msg[MSG_LEN_OFFSET]), &data_len, 2);
-    chk = get_checksum(ret_msg, data_len + MSG_FORMAT_LENGTH);
-    memcpy(&(ret_msg[msg_point]), &chk, 2);
+    ret_msg[MSG_LEN_OFFSET] = get_checksum(ret_msg, data_len + MSG_FORMAT_LENGTH);
+    // memcpy(&(ret_msg[msg_point]), &chk, 2);
 
     response(ret_msg, data_len+MSG_FORMAT_LENGTH);
     free(ret_msg);
