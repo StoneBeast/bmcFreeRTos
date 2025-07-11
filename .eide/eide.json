@@ -37,7 +37,8 @@
           "RAM": [],
           "ROM": []
         },
-        "options": "null"
+        "options": "null",
+        "archExtensions": ""
       },
       "uploader": "JLink",
       "uploadConfig": {
@@ -122,7 +123,7 @@
           "c/cpp-compiler": {
             "language-c": "c11",
             "language-cpp": "c++11",
-            "optimization": "level-debug",
+            "optimization": "level-0",
             "warnings": "all-warnings",
             "one-elf-section-per-function": true,
             "one-elf-section-per-data": true
@@ -138,5 +139,5 @@
       }
     }
   },
-  "version": "3.5"
+  "version": "3.6"
 }

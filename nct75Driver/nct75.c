@@ -3,97 +3,45 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define REG_STORE_VALUE_ADDR        0x00
-#define REG_CONFIG_ADDR             0x01
-#define REG_THYST_ADDR              0x02
-#define REG_TOS_ADDR                0x03
-#define REG_ONE_SHOT_ADDR           0x04
-#define ASSERT_REGISTER(reg)       ((reg == REG_STORE_VALUE_ADDR)   ||  \
-                                    (reg == REG_CONFIG_ADDR)        ||  \
-                                    (reg == REG_THYST_ADDR)         ||  \
-                                    (reg == REG_TOS_ADDR)           ||  \
-                                    (reg == REG_ONE_SHOT_ADDR))
+// NCT75 Register map
+#define NCT75_REG_TEMP   0x00
+#define NCT75_REG_CONFIG 0x01
+#define NCT75_REG_THYST  0x02
+#define NCT75_REG_TOS    0x03
 
-#define CONFIG_MUSK_SHUTDOWN        0x01
-#define CONFIG_MUSK_ALERT_MODE      0x02
-#define CONFIG_MUSK_ALERT_PIN_POL   0x04
-#define CONFIG_MUSK_FAULT_QUEUE     0x0C
-#define CONFIG_MUSK_ONESHOT_MODE    0x10
+// Configuration bits
+#define NCT75_CONFIG_SD  (1 << 0) // Shutdown mode
+#define NCT75_CONFIG_TM  (1 << 1) // Thermostat mode
+#define NCT75_CONFIG_POL (1 << 2) // OS output polarity
+#define NCT75_CONFIG_F0  (1 << 3) // Fault queue F0
+#define NCT75_CONFIG_F1  (1 << 4) // Fault queue F1
+#define NCT75_CONFIG_R0  (1 << 5) // Resolution bit0
+#define NCT75_CONFIG_R1  (1 << 6) // Resolution bit1
+#define NCT75_CONFIG_OS  (1 << 7) // One-shot conversion
 
-static void _nct75_write_reg(const nct75_t* p_nct75, uint8_t reg_addr, const uint8_t* wdata, uint16_t data_len)
+uint8_t NCT75_SetResolution(const nct75_t *p_nct75, NCT75_Resolution res)
 {
-    uint8_t* w_raw = malloc(data_len+1);
-    w_raw[0] = reg_addr;
-    memcpy(w_raw+1, wdata, data_len);
-
-    NCT75_I2C_WRITE(p_nct75->slave_addr, w_raw, data_len+1);
+    uint8_t config;
+    HAL_StatusTypeDef ret;
+    // Read current config
+    ret = HAL_I2C_Mem_Read(&NCT75_I2C, p_nct75->slave_addr, NCT75_REG_CONFIG, I2C_MEMADD_SIZE_8BIT, &config, 1, HAL_MAX_DELAY);
+    if (ret != HAL_OK) return ret;
+    // Mask out resolution bits
+    config &= ~(NCT75_CONFIG_R0 | NCT75_CONFIG_R1);
+    // Set new resolution
+    config |= (uint8_t)res;
+    // Write back
+    return HAL_I2C_Mem_Write(&NCT75_I2C, p_nct75->slave_addr, NCT75_REG_CONFIG, I2C_MEMADD_SIZE_8BIT, &config, 1, HAL_MAX_DELAY);
 }
 
-static void _nct75_read_reg(const nct75_t* p_nct75, uint8_t reg_addr, uint8_t* rdata, uint16_t data_len)
-{
-    NCT75_I2C_WRITE(p_nct75->slave_addr, &reg_addr, 1);
-    NCT75_I2C_READ(p_nct75->slave_addr, rdata, data_len);
-}
-
-static void _nct75_set_hyst_os(const nct75_t* p_nct75, uint16_t hyst, uint16_t os)
-{
-    _nct75_write_reg(p_nct75, REG_THYST_ADDR, (uint8_t*)(&hyst), 2);
-    _nct75_write_reg(p_nct75, REG_TOS_ADDR, (uint8_t*)(&os), 2);
-}
-
-static void _nct75_set_config(const nct75_t* p_nct75, const nct75Conig_t* p_cfg)
-{
-    uint8_t cfg_byte = 0;
-
-    cfg_byte |= ((p_cfg->shutdown_mode << 0) & CONFIG_MUSK_SHUTDOWN);
-    cfg_byte |= ((p_cfg->alert_mode << 1) & CONFIG_MUSK_ALERT_MODE);
-    cfg_byte |= ((p_cfg->alert_polarity << 2) & CONFIG_MUSK_ALERT_PIN_POL);
-    cfg_byte |= ((p_cfg->fault_queue << 3) & CONFIG_MUSK_FAULT_QUEUE);
-    cfg_byte |= ((p_cfg->one_shot_mode << 5) & CONFIG_MUSK_ONESHOT_MODE);
-
-    _nct75_write_reg(p_nct75, REG_CONFIG_ADDR, &cfg_byte, 1);
-}
-
-static void _nct75_switch(const nct75_t* p_nct75, uint8_t is_down)
-{
-    uint8_t cfg_byte = 0;
-
-    if(p_nct75->shutdown_mode) {
-        _nct75_read_reg(p_nct75, REG_CONFIG_ADDR, &cfg_byte, 1);
-        cfg_byte &= 0xFE;
-        cfg_byte |= ((p_nct75->shutdown_mode << 0) & CONFIG_MUSK_SHUTDOWN);
-    }
-}
-
-void _init_nct75(nct75_t *p_nct75, uint8_t addr, uint8_t is_one_shot, const nct75Conig_t* config)
+void _init_nct75(nct75_t *p_nct75, uint8_t addr, NCT75_Resolution resolution)
 {
 
     /* TODO: 配置项合法性验证 */
 
     p_nct75->slave_addr = (uint8_t)((addr<<1)&0xFE);
-    p_nct75->one_shot_mode = 0;
-    p_nct75->shutdown_mode = 0;
-
-    nct75Conig_t temp_cfg  = {
-        .alert_mode     = 0,
-        .alert_polarity = 0,
-        .fault_queue    = 0,
-        .hysteresis     = 0,
-        .one_shot_mode  = 0,
-        .overtemperture = 0,
-        .shutdown_mode  = 0,
-    };
-
-    if (config != NULL) {
-        p_nct75->one_shot_mode = config->one_shot_mode;
-        p_nct75->shutdown_mode = config->shutdown_mode;
-        memcpy(&temp_cfg, config, sizeof(nct75Conig_t));
-        _nct75_set_hyst_os(p_nct75, temp_cfg.hysteresis, temp_cfg.overtemperture);
-    } else {
-        p_nct75->one_shot_mode = is_one_shot;
-    }
-
-    _nct75_set_config(p_nct75, &temp_cfg);
+    p_nct75->resolution = resolution;
+    NCT75_SetResolution(p_nct75, resolution);
 }
 
 
@@ -104,29 +52,19 @@ void _init_nct75(nct75_t *p_nct75, uint8_t addr, uint8_t is_one_shot, const nct7
  */
 short nct75_read_rawData(const nct75_t* p_nct75)
 {
-    uint8_t temp_data = 1;
-    uint16_t temperature_data;
-    uint16_t temp_t_data;
+    uint8_t buf[2];
+    HAL_StatusTypeDef ret;
 
-    if (p_nct75->shutdown_mode)
-        _nct75_switch(p_nct75, 0);
+    // Read two bytes from temperature register
+    ret = HAL_I2C_Mem_Read(&NCT75_I2C, p_nct75->slave_addr, NCT75_REG_TEMP, I2C_MEMADD_SIZE_8BIT, buf, 2, HAL_MAX_DELAY);
+    if (ret != HAL_OK) return ret;
 
-    if (p_nct75->one_shot_mode) {
-        _nct75_write_reg(p_nct75, REG_ONE_SHOT_ADDR, &temp_data, 1);
-        NCT75_Delay(50);
-    }
+    // Combine bytes: MSB is temperature sign and integer bits, LSB holds fractional bits
+    int16_t raw = (int16_t)((buf[0] << 8) | buf[1]);
+    // Shift right by 4 (12-bit resolution)
+    raw >>= 4;
 
-    _nct75_read_reg(p_nct75, REG_STORE_VALUE_ADDR, (uint8_t*)(&temperature_data), 2);
-    temp_t_data = temperature_data;
-    temp_t_data &= 0x8000;
-
-    temperature_data >>= 4;
-    temperature_data |= temp_t_data;
-
-    if (p_nct75->shutdown_mode)
-        _nct75_switch(p_nct75, 1);
-
-    return ((short)(temperature_data));
+    return raw;
 }
 
 /***
@@ -137,7 +75,7 @@ short nct75_read_rawData(const nct75_t* p_nct75)
 float nct75_temperature_data_conversion(short rawData)
 {
     float ret_data;
-    ret_data = (float)(rawData/16);
+    ret_data = (float)(rawData*0x0625);
 
     return ret_data;
 }

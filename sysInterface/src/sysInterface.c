@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-11 13:59:55
+ * @LastEditTime : 2025-07-10 10:18:05
  * @Description  : 
  */
 
@@ -59,9 +59,6 @@ void sys_request_handler(void)
     while (1)
     {
         xQueueReceive(sys_req_queue, &req, portMAX_DELAY);
-
-        // if (check_msg(req.request_msg, req.request_len))    /* 请求数据损坏 */
-        //     continue;
 
         if (req.request_msg[MSG_TYPE_OFFSET] == SYS_MSG_TYPE_REQ) {
             switch (req.request_msg[MSG_CODE_OFFSET]) {

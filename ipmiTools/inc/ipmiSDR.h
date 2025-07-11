@@ -1,6 +1,15 @@
+/*
+ * @Author       : stoneBeast
+ * @Date         : 2025-03-07 18:14:30
+ * @Encoding     : UTF-8
+ * @LastEditors  : stoneBeast
+ * @LastEditTime : 2025-07-10 11:02:35
+ * @Description  : 
+ */
 #ifndef __IPMI_SDR_H
 #define __IPMI_SDR_H
 
+#include <stdint.h>
 #include "ipmiConfig.h"
 
 /* SDR Header */
@@ -123,6 +132,9 @@
 #define SENSOR_TYPE_TEMPERATURE             0x01
 #define SENSOR_TYPE_VOLTAGE                 0x02
 #define SENSOR_TYPE_POWER                   0x08
+#define SENSOR_UNIT_CODE_DC                 0x01
+#define SENSOR_UNIT_CODE_V                  0x04
+#define SENSOR_UNIT_CODE_A                  0x05
 
 #define GENGRATE_SDR_DATA(sdr_buf, id, type, units_code, M, MT, R_B, max, min, id_str)                             \
     {                                                                                                              \
@@ -158,10 +170,40 @@ typedef struct{
     unsigned char sdr_count;
 }sdr_index_info_t;
 
+typedef struct{
+    uint8_t dev_addr;
+    uint8_t sdr_id;
+    uint8_t sensor_type;
+    uint8_t data_unit_code;
+    uint8_t is_data_signed;
+    uint16_t read_data;
+    uint16_t higher_threshold;
+    uint16_t lower_threshold;
+    uint16_t (*sensor_read)(void);
+    short argM;
+    short argK2;
+    char sensor_name[SENSOR_NAME_MAX_LEN];
+    uint8_t name_len;
+}Sdr_t;
+
+typedef struct {
+    uint8_t id;
+    Sdr_t sdr;
+}Res_sdr_t;
+
+typedef struct {
+    uint8_t sdr_count;
+    Sdr_t * p_sdr_list[SDR_MAX_COUNT];
+}Sdr_index_t;
+
+
 unsigned char index_sdr(sdr_index_info_t* sdr_info);
 float reading_date_conversion(unsigned char* sdr_start_units1);
 char* get_val_str(unsigned char* sdr_start_units1);
 float data_conversion(short data, unsigned char* sdr_start_M);
 void get_M_K2(short *M, short *K2, unsigned char *sdr_start_units1);
+
+void init_sdr(Sdr_index_t *sdr_index);
+uint8_t sdr_setData(Sdr_index_t *sdr, uint8_t sdr_id, uint16_t data);
 
 #endif // !__IPMI_SDR_H

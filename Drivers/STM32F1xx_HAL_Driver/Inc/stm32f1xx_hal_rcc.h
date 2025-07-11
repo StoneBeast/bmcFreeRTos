@@ -1204,7 +1204,7 @@ void              HAL_RCC_CSSCallback(void);
 #define HSE_TIMEOUT_VALUE              HSE_STARTUP_TIMEOUT
 #define HSI_TIMEOUT_VALUE              2U      /* 2 ms (minimum Tick + 1) */
 #define LSI_TIMEOUT_VALUE              2U      /* 2 ms (minimum Tick + 1) */
-#define PLL_TIMEOUT_VALUE              2U      /* 2 ms (minimum Tick + 1) */
+#define PLL_TIMEOUT_VALUE              7U      /* 2 ms (minimum Tick + 1) */
 
 /**
   * @}

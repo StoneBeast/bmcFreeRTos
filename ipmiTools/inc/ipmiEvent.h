@@ -20,10 +20,10 @@
 #define EVENT_BODY_READ_VAL_OFFSET      4
 #define EVENT_BODY_MAX_VAL_OFFSET       6
 #define EVENT_BODY_UNIT_CODE_OFFSET     8
-#define EVENT_BODY_START_M_OFFSET       9
-#define EVENT_BODY_START_M_LEN          7
-#define EVENT_BODY_NAME_LEN_OFFSET      16
-#define EVENT_BODY_NAME_OFFSET          17
+#define EVENT_BODY_ARG_M_OFFSET         9
+#define EVENT_BODY_ARG_K2_OFFSET        11
+#define EVENT_BODY_NAME_LEN_OFFSET 13
+#define EVENT_BODY_NAME_OFFSET     14
 
 typedef struct {
     uint8_t addr;

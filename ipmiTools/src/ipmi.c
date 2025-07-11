@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-11 14:36:53
+ * @LastEditTime : 2025-07-10 17:25:04
  * @Description  : ipmi功能实现
  */
 
@@ -23,8 +23,8 @@
 
 //  TODO: 释放rqSeq功能
 
-fru_t g_fru;
-sdr_index_info_t g_sdr_index;
+// fru_t g_fru;
+// sdr_index_info_t g_sdr_index;
 uint8_t g_local_addr = 0x00;                    /* 本机地址 */
 uint8_t re_seq_arr[64] = {0};                   /* req seq占用状态记录 */
 uint8_t g_ipmb_msg[64] = {0};                   /* ipmb消息接收数组 */
@@ -35,6 +35,7 @@ link_list_manager* ipmi_request_manager;        /* 管理发送出的请求的�
 link_list_manager* ipmi_res_manager;            /* 管理响应的链表 */
 QueueHandle_t res_queue;                        /* 将相应信息从接收task传递到处理task */
 SemaphoreHandle_t event_queue_mutex;
+static Sdr_index_t sdr_index;
 
 static sensor_ev_t g_event_arr[EVENT_MAX_COUNT];
 static uint8_t event_count = 0;
@@ -46,12 +47,10 @@ extern volatile uint8_t debug_read;
 #endif // !USE_DEBUG_CMD == 1
 
 uint8_t* scan_device(uint16_t* device_count);
-static void get_fru_info(void);
 uint8_t get_device_id_msg_handler(fru_t* fru, uint8_t* msg);
 static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* sdr_len);
 static uint8_t* get_device_sdr_info(uint8_t ipmi_addr);
 static void update_sensor_data_task_func(void);
-static void verify_sdr(void);
 
 /*** 
  * @brief 获取本地地址
@@ -248,9 +247,10 @@ uint8_t init_bmc(void)
         return 0;
 
     init_sensor();
-    verify_sdr();
-    get_fru_info();
-    index_sdr(&g_sdr_index);
+    // verify_sdr();
+    // get_fru_info();
+    // index_sdr(&g_sdr_index);
+    init_sdr(&sdr_index);
     ipmi_request_manager = link_list_manager_get();
     ipmi_res_manager = link_list_manager_get();
 
@@ -459,7 +459,9 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
         memcpy(&(temp_e.read_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_READ_VAL_OFFSET]), 2);
 
         /* M, K2 */
-        get_M_K2(&(temp_e.M), &(temp_e.K2), &(msg[RESPONSE_DATA_START + 5]));
+        memcpy(&(temp_e.M), &(msg[RESPONSE_DATA_START + EVENT_BODY_ARG_M_OFFSET]), 2);
+        memcpy(&(temp_e.K2), &(msg[RESPONSE_DATA_START + EVENT_BODY_ARG_K2_OFFSET]), 2);
+        // get_M_K2(&(temp_e.M), &(temp_e.K2), &(msg[RESPONSE_DATA_START + 5]));
 
         /* unit code */
         temp_e.unit_code = msg[RESPONSE_DATA_START+EVENT_BODY_UNIT_CODE_OFFSET];
@@ -585,7 +587,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     ipmb_recv_t temp_recv;
     uint8_t* p_res_data;
     uint8_t target_sdr_index = 0x00;
-    uint16_t start_addr;
+    // uint16_t start_addr;
 
     if (ipmi_addr != g_local_addr)
     {
@@ -616,26 +618,45 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
         if (record_id == 0x0000)
             target_sdr_index = 0;
         else {
-            for (uint8_t i = 0; i < g_sdr_index.sdr_count; i++)
+            for (uint8_t i = 0; i < sdr_index.sdr_count; i++)
             {
-                if(record_id == g_sdr_index.info[i].id) {
+                if(record_id == sdr_index.p_sdr_list[i]->sdr_id) {
                     target_sdr_index = i;
                     break;
                 }
             }
         }
 
-        start_addr = g_sdr_index.info[target_sdr_index].addr;
-        *res_len = 2 + (g_sdr_index.info)[target_sdr_index].len;
+        /* 非法id */
+        if (target_sdr_index == sdr_index.sdr_count) {
+            *res_len = 0;
+            p_res_data = NULL;
 
-        p_res_data = malloc(*res_len);
+            return p_res_data;
+        }
 
-        if (target_sdr_index == (g_sdr_index.sdr_count - 1))
-            ((uint16_t*)(p_res_data))[0] = 0x0000;
-        else
-            ((uint16_t*)(p_res_data))[0] = g_sdr_index.info[target_sdr_index+1].id;
+        *res_len = sizeof(Res_sdr_t);
+        p_res_data = malloc(sizeof(Res_sdr_t));
 
-        read_flash(start_addr, ((*res_len)-2), &(p_res_data[2]));
+        /* 最后一个sdr */
+        if (target_sdr_index == (sdr_index.sdr_count - 1)) {
+            ((Res_sdr_t*)p_res_data)->id = 0;
+        } else {
+            ((Res_sdr_t *)p_res_data)->id = sdr_index.p_sdr_list[target_sdr_index+1]->sdr_id;
+        }
+        memcpy(&(((Res_sdr_t *)p_res_data)->sdr), sdr_index.p_sdr_list[target_sdr_index + 1], sizeof(Sdr_t));
+
+        // start_addr = g_sdr_index.info[target_sdr_index].addr;
+        // *res_len = 2 + (g_sdr_index.info)[target_sdr_index].len;
+
+        // p_res_data = malloc(*res_len);
+
+        // if (target_sdr_index == (g_sdr_index.sdr_count - 1))
+        //     ((uint16_t*)(p_res_data))[0] = 0x0000;
+        // else
+        //     ((uint16_t*)(p_res_data))[0] = g_sdr_index.info[target_sdr_index+1].id;
+
+        // read_flash(start_addr, ((*res_len)-2), &(p_res_data[2]));
     }
 
     return p_res_data;
@@ -679,14 +700,13 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
     uint8_t* sdr_info;
     uint8_t sensor_num = 0;
     uint8_t sdr_data_len;
-    uint8_t* temp_res_data;
+    Res_sdr_t* temp_res_data;
     uint16_t next_id = 0;
     uint8_t* ret_data;
     uint16_t temp_point = 0;
-    short temp_M, temp_K2;
 
     if (ipmi_addr == g_local_addr) 
-        sensor_num = g_sdr_index.sdr_count;
+        sensor_num = sdr_index.sdr_count;
 
     else {
         sdr_info = get_device_sdr_info(ipmi_addr);
@@ -704,46 +724,51 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
         return ret_data;
     }
 
-
     /* 这里把name的长度限制到了16Byte */
-    ret_data = malloc(1+sensor_num*25);
-    memset(ret_data, 0, 1+sensor_num*25);
+    ret_data = malloc(1+sensor_num*sizeof(Sdr_t));
+    memset(ret_data, 0, 1 + sensor_num * sizeof(Sdr_t));
     ret_data[0] = sensor_num;
     temp_point = 1;
 
     do
     {
-        temp_res_data = get_device_sdr(ipmi_addr, next_id, &sdr_data_len);
-        next_id = ((uint16_t *)temp_res_data)[0];
-
-        /* number 1Byte */
-        ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_NUMBER_OFFSET];
-
-        /* raw data 2Byte */
-        ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_OFFSET];
-        ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_HIGH_OFFSET];
-
-        /* M 2Byte K 2Byte */
-        get_M_K2(&temp_M, &temp_K2, &temp_res_data[2 + SDR_SENSOR_UNITS_1_OFFSET]);
-        memcpy(&(ret_data[temp_point]), &temp_M, 2);
-        temp_point += 2;
-        memcpy(&(ret_data[temp_point]), &temp_K2, 2);
-        temp_point += 2;
-
-        /* 单位 */
-        ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_UNITS_2_OFFSET];
-
-        /* name len */
-        if(temp_res_data[2 + SDR_ID_SRT_TYPE_LEN_OFFSET] > 16)
-            ret_data[temp_point++] = 16;
-        else {
-            ret_data[temp_point++] = temp_res_data[2 + SDR_ID_SRT_TYPE_LEN_OFFSET];
+        temp_res_data = (Res_sdr_t*)get_device_sdr(ipmi_addr, next_id, &sdr_data_len);
+        if (temp_res_data == NULL) {
+            continue;
         }
 
-        /* name nByte */
-        memcpy(&(ret_data[temp_point]), &(temp_res_data[2 + SDR_ID_STR_BYTE_OFFSET]), ret_data[temp_point-1]);
+        next_id = temp_res_data->id;
+        memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr), sizeof(Sdr_t));
+        temp_point += sizeof(Sdr_t);
 
-        temp_point += ret_data[temp_point - 1];
+        /* number 1Byte */
+        // ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_NUMBER_OFFSET];
+
+        /* raw data 2Byte */
+        // ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_OFFSET];
+        // ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_HIGH_OFFSET];
+
+        /* M 2Byte K 2Byte */
+        // get_M_K2(&temp_M, &temp_K2, &temp_res_data[2 + SDR_SENSOR_UNITS_1_OFFSET]);
+        // memcpy(&(ret_data[temp_point]), &temp_M, 2);
+        // temp_point += 2;
+        // memcpy(&(ret_data[temp_point]), &temp_K2, 2);
+        // temp_point += 2;
+
+        /* 单位 */
+        // ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_UNITS_2_OFFSET];
+
+        /* name len */
+        // if(temp_res_data[2 + SDR_ID_SRT_TYPE_LEN_OFFSET] > 16)
+        //     ret_data[temp_point++] = 16;
+        // else {
+        //     ret_data[temp_point++] = temp_res_data[2 + SDR_ID_SRT_TYPE_LEN_OFFSET];
+        // }
+
+        /* name nByte */
+        // memcpy(&(ret_data[temp_point]), &(temp_res_data[2 + SDR_ID_STR_BYTE_OFFSET]), ret_data[temp_point-1]);
+
+        // temp_point += ret_data[temp_point - 1];
 
         free(temp_res_data);
     } while (0 != next_id);
@@ -755,27 +780,6 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
 }
 
 /*** 
- * @brief 获取fru info，占位
- * @return [void]
- */
-static void get_fru_info(void)
-{
-    g_fru.ipmb_addr = g_local_addr;
-    g_fru.hard_addr = (g_local_addr>>1);
-    g_fru.slot = 0;
-    strcpy(g_fru.device_name, DEVICE_NAME);
-    g_fru.device_id = DEVICE_ID;
-    g_fru.prodect_id = PRODUCT_ID;
-    g_fru.device_rev = DEVICE_REVISION;
-    g_fru.firmware_rev_maj = FIRMWARE_REVISION_MAJOR;
-    g_fru.firmware_rev_min = FIRMWARE_REVISION_MINOR;
-    g_fru.ipmi_ver = IPMI_VERSION;
-    g_fru.additional = ADDITIONAL;
-    g_fru.manuf_id = MANUFACTURER_ID;
-    g_fru.aux_firmware_rev = AUXILIARY_FIRMWARE_REV;
-}
-
-/*** 
  * @brief 更新传感器数据任务函数
  * @param argc [int]    参数个数
  * @param argv [char*]  参数列表
@@ -783,21 +787,16 @@ static void get_fru_info(void)
  */
 static void update_sensor_data_task_func(void)
 {
-    uint8_t temp_data = 0;
     uint16_t data[SENSOR_COUNT];
-    uint16_t ht_data[2];
     sensor_ev_t temp_p;
-    uint8_t temp_sdr_U1[12];
-    uint8_t u1;
+    uint8_t is_sig;
     uint8_t is_over = 0;
+    uint8_t i = 0;
 
     /* 读取传感器数据 */
-    data[0] = read_sdr1_sensor_data();
-    data[1] = read_sdr2_sensor_data();
-    data[2] = read_sdr3_sensor_data();
-    data[3] = read_sdr4_sensor_data();
-    data[4] = read_sdr5_sensor_data();
-    data[5] = read_sdr6_sensor_data();
+    for (i=0; i<sdr_index.sdr_count; i++) {
+        data[i] = sdr_index.p_sdr_list[i]->sensor_read();
+    }
 
 #if USE_DEBUG_CMD == 1
     if (debug_read == 1) {
@@ -811,37 +810,22 @@ static void update_sensor_data_task_func(void)
     }
 #endif // !USE_DEBUG_CMD == 1
 
-    for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
+    for (uint8_t i = 0; i < sdr_index.sdr_count; i++) {
         /* 向sdr更新数据 */
-        temp_data = (uint8_t)(data[i] & 0x00FF);
-        write_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_READING_OFFSET, 1, &temp_data);
-        temp_data = (uint8_t)((data[i] & 0xFF00) >> 8);
-        write_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_READING_HIGH_OFFSET, 1, &temp_data);
+        sdr_setData(&sdr_index, i+1, data[i]);
 
         /* 判断是否为正常数据 */
-        read_flash((g_sdr_index.info[i].addr)+SDR_NORMAL_MAX_READING_OFFSET, 1, &(((uint8_t*)&(ht_data[0]))[0]));
-        read_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_MAXIMUM_HIGH_OFFSET, 1, &(((uint8_t *)&(ht_data[0]))[1]));
-
-        read_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_MIN_READING_OFFSET, 1, &(((uint8_t *)&(ht_data[1]))[0]));
-        read_flash((g_sdr_index.info[i].addr) + SDR_NORMAL_MINIMUM_HIGH_OFFSET, 1, &(((uint8_t *)&(ht_data[1]))[1]));
-
-        // TODO: 目前只考虑无符号和补码的情况
-        // FIXME:目前上位机无法判断数据形式，一律按照 short 类型处理  
-        read_flash((g_sdr_index.info[i].addr) + SDR_SENSOR_UNITS_1_OFFSET, 1, &u1);
-
-        if((u1&0xc0) == 0x00) {
-            if((data[i] < ht_data[1]) || (data[i] > ht_data[0]))
+        is_sig = sdr_index.p_sdr_list[i]->is_data_signed;
+        if (is_sig) {
+            if (((short)(sdr_index.p_sdr_list[i]->higher_threshold)) < ((short)(data[i])) || ((short)(sdr_index.p_sdr_list[i]->lower_threshold)) > ((short)(data[i])))
                 is_over = 1;
-            else {
+            else
                 is_over = 0;
-            }
-        }
-        else {
-            if (((short)(data[i]) < (short)(ht_data[1])) || ((short)(data[i]) > (short)(ht_data[0])))
+        } else {
+            if ((sdr_index.p_sdr_list[i]->higher_threshold) < data[i] || (sdr_index.p_sdr_list[i]->lower_threshold) > data[i])
                 is_over = 1;
-            else {
+            else
                 is_over = 0;
-            }
         }
 
         if(is_over)
@@ -850,86 +834,32 @@ static void update_sensor_data_task_func(void)
             temp_p.addr = g_local_addr;
 
             /* 传感器编号 */
-            read_flash((g_sdr_index.info[i].addr) + SDR_SENSOR_NUMBER_OFFSET, 1, &(temp_p.sensor_no));
+            temp_p.sensor_no = sdr_index.p_sdr_list[i]->sdr_id;
 
             /* min */
-            temp_p.min_val = ht_data[1];
+            temp_p.min_val = sdr_index.p_sdr_list[i]->lower_threshold;
 
             /* max */
-            temp_p.max_val = ht_data[0];
+            temp_p.max_val = sdr_index.p_sdr_list[i]->higher_threshold;
 
             /* raw */
             temp_p.read_val = data[i];
 
             /* M, K2 */
-            read_flash((g_sdr_index.info[i].addr) + SDR_SENSOR_UNITS_1_OFFSET, 12, temp_sdr_U1);
-            get_M_K2(&(temp_p.M), &(temp_p.K2), temp_sdr_U1);
+            temp_p.M = sdr_index.p_sdr_list[i]->argM;
+            temp_p.K2 = sdr_index.p_sdr_list[i]->argK2;
 
             /* unit code*/
-            read_flash((g_sdr_index.info[i].addr) + SDR_SENSOR_UNITS_2_OFFSET, 1, &(temp_p.unit_code));
+            temp_p.unit_code = sdr_index.p_sdr_list[i]->data_unit_code;
 
             /* name, name len */
-            memset(temp_p.sensor_name, 0, 16);
-            read_flash((g_sdr_index.info[i].addr) + SDR_ID_SRT_TYPE_LEN_OFFSET, 1, &(temp_p.sensor_name_len));
-            read_flash((g_sdr_index.info[i].addr) + SDR_ID_STR_BYTE_OFFSET, temp_p.sensor_name_len, (uint8_t *)(temp_p.sensor_name));
+            temp_p.sensor_name_len = sdr_index.p_sdr_list[i]->name_len;
+            strncpy(temp_p.sensor_name, sdr_index.p_sdr_list[i]->sensor_name, temp_p.sensor_name_len);
 
             /* 上报事件 */
             push_event(temp_p);
         }
     }
-}
-
-/*** 
- * @brief 验证sdr数据，错误时重新sdr数据
- * @return [void]
- */
-static void verify_sdr(void)
-{
-    // TODO: 在宏定义中指定位置，暂定为flash最后一个字节
-    // TODO: 校验码 == (传感器数量+sum(传感器type code))%0xFF
-    uint8_t sdr_count = SENSOR_COUNT;
-    uint8_t verify_code = 0;
-    uint8_t temp_date = 0;
-    uint8_t sdr_buf[SDR_MAX_LEN] = {0};
-    uint8_t sensor_type[SENSOR_COUNT] = {SENSOR_TYPE_VOLTAGE,
-                                         SENSOR_TYPE_VOLTAGE, SENSOR_TYPE_VOLTAGE,
-                                         SENSOR_TYPE_POWER, SENSOR_TYPE_TEMPERATURE,
-                                         SENSOR_TYPE_TEMPERATURE};
-    uint16_t sdr_addr = 0;
-
-    verify_code = sdr_count;
-    for (uint8_t i = 0; i < sdr_count; i++)
-    {
-        verify_code += sensor_type[i];
-    }
-    verify_code %= 0xFF;
-
-    /* 读数据 */
-    read_flash(0x07FF, 1, &temp_date);
-    /* 比较数据 */
-    if (temp_date == verify_code) 
-        return;
-
-    //TODO: 考虑将M，MT两个属性合成M，将M扩大为16位有符号数
-    /* 生成并写入sdr */
-    GENGRATE_SDR_DATA(sdr_buf, 0x01, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, 0x0fff, 0x0001, "ADC01");
-    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
-    sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x02, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, 0x0fff, 0x0001, "ADC02");
-    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
-    sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x03, SENSOR_TYPE_VOLTAGE, 0x04, 0x50, 0, 0xB0, 0x0fff, 0x0001, "ADC03");
-    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
-    sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x04, SENSOR_TYPE_POWER, 0x05, 0x42, 0x01, 0xB0, 0x0fff, 0x0001, "ADC04");
-    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
-    sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x05, SENSOR_TYPE_TEMPERATURE, 0x01, 0x3E, 0, 0xA0, 0x0fff, 0x8001, "NCT01");
-    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
-    sdr_addr += SDR_MAX_LEN;
-    GENGRATE_SDR_DATA(sdr_buf, 0x06, SENSOR_TYPE_TEMPERATURE, 0x01, 0x3E, 0, 0xA0, 0x0fff, 0x8001, "NCT02");
-    write_flash(sdr_addr, SDR_MAX_LEN, sdr_buf);
-    write_flash(0x07FF, 1, &verify_code);
 }
 
 #if 0

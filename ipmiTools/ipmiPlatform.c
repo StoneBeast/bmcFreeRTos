@@ -80,7 +80,7 @@ void __USER_IMPLEMENTATION init_inter_bus(void)
 void __USER_IMPLEMENTATION init_temp_sensor(void)
 {
     simple_init_nct75(&nct75_0, 0x48, 0);
-    simple_init_nct75(&nct75_0, 0x4A, 0);
+    simple_init_nct75(&nct75_1, 0x4A, 0);
 }
 
 uint8_t __USER_IMPLEMENTATION read_flash(uint16_t addr, uint8_t read_len, uint8_t* data)
