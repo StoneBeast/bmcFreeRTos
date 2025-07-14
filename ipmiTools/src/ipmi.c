@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-10 17:25:04
+ * @LastEditTime : 2025-07-14 16:50:59
  * @Description  : ipmi功能实现
  */
 
@@ -644,7 +644,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
         } else {
             ((Res_sdr_t *)p_res_data)->id = sdr_index.p_sdr_list[target_sdr_index+1]->sdr_id;
         }
-        memcpy(&(((Res_sdr_t *)p_res_data)->sdr), sdr_index.p_sdr_list[target_sdr_index + 1], sizeof(Sdr_t));
+        memcpy(&(((Res_sdr_t *)p_res_data)->sdr), sdr_index.p_sdr_list[target_sdr_index], sizeof(Sdr_t));
 
         // start_addr = g_sdr_index.info[target_sdr_index].addr;
         // *res_len = 2 + (g_sdr_index.info)[target_sdr_index].len;
@@ -738,27 +738,30 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
         }
 
         next_id = temp_res_data->id;
-        memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr), sizeof(Sdr_t));
-        temp_point += sizeof(Sdr_t);
+        // memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr), sizeof(Sdr_t));
+        // temp_point += sizeof(Sdr_t);
 
         /* number 1Byte */
-        // ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_NUMBER_OFFSET];
+        ret_data[temp_point++] = temp_res_data->sdr.sdr_id;
 
         /* raw data 2Byte */
+        memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr.read_data), 2);
+        temp_point += 2;
         // ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_OFFSET];
         // ret_data[temp_point++] = temp_res_data[2 + SDR_NORMAL_READING_HIGH_OFFSET];
 
         /* M 2Byte K 2Byte */
         // get_M_K2(&temp_M, &temp_K2, &temp_res_data[2 + SDR_SENSOR_UNITS_1_OFFSET]);
-        // memcpy(&(ret_data[temp_point]), &temp_M, 2);
-        // temp_point += 2;
-        // memcpy(&(ret_data[temp_point]), &temp_K2, 2);
-        // temp_point += 2;
+        memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr.argM), 2);
+        temp_point += 2;
+        memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr.argK2), 2);
+        temp_point += 2;
 
         /* 单位 */
-        // ret_data[temp_point++] = temp_res_data[2 + SDR_SENSOR_UNITS_2_OFFSET];
+        ret_data[temp_point++] = temp_res_data->sdr.data_unit_code;
 
         /* name len */
+        ret_data[temp_point++] = temp_res_data->sdr.name_len;
         // if(temp_res_data[2 + SDR_ID_SRT_TYPE_LEN_OFFSET] > 16)
         //     ret_data[temp_point++] = 16;
         // else {
@@ -766,9 +769,9 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
         // }
 
         /* name nByte */
-        // memcpy(&(ret_data[temp_point]), &(temp_res_data[2 + SDR_ID_STR_BYTE_OFFSET]), ret_data[temp_point-1]);
+        memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr.sensor_name), ret_data[temp_point-1]);
 
-        // temp_point += ret_data[temp_point - 1];
+        temp_point += ret_data[temp_point - 1];
 
         free(temp_res_data);
     } while (0 != next_id);
