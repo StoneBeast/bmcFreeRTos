@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:28:11
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-05 16:22:49
+ * @LastEditTime : 2025-07-14 14:14:48
  * @Description  : 
  */
 
@@ -38,7 +38,8 @@ int __USER get_interface_uart_it_flag(uint16_t it)
 unsigned char __USER get_interface_uart_data(void)
 {
     uint8_t rc;
-    HAL_UART_Receive(&huart1, &rc, 1, 100);
+    rc = huart1.Instance->DR;
+    // HAL_UART_Receive(&huart1, &rc, 1, 100);
     return rc;
 }
 

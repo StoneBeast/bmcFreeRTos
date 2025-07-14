@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-11 19:09:40
+ * @LastEditTime : 2025-07-14 14:30:20
  * @Description  : 
  */
 
@@ -43,6 +43,7 @@ void init_sysInterface(void)
     init_status_led();
     init_interface_uart();
     enable_uart_interrupt();
+    clear_interface_uart_idel_it_flag();
 }
 
 /*** 
@@ -373,7 +374,7 @@ static void get_event(void)
         data_len += temp_event.sensor_name_len;
     }
     memcpy(&(ret_msg[MSG_LEN_OFFSET]), &data_len, 2);
-    ret_msg[MSG_LEN_OFFSET] = get_checksum(ret_msg, data_len + MSG_FORMAT_LENGTH);
+    ret_msg[msg_point] = get_checksum(ret_msg, data_len + MSG_FORMAT_LENGTH);
     // memcpy(&(ret_msg[msg_point]), &chk, 2);
 
     response(ret_msg, data_len+MSG_FORMAT_LENGTH);
@@ -408,7 +409,7 @@ void USART1_IRQHandler(void)
             request_recv_buffer.request_msg[request_recv_buffer.request_len++] = rc;
     }
 
-    if (get_interface_uart_it_flag(SYSINTERFACE_IT_IDLE) != 0) /* idle中断触发，完成一帧数据帧接收 */
+    else if (get_interface_uart_it_flag(SYSINTERFACE_IT_IDLE) != 0) /* idle中断触发，完成一帧数据帧接收 */
     {
         if (0 == check_msg(request_recv_buffer.request_msg, request_recv_buffer.request_len)) {
             if (request_recv_buffer.request_msg[0] == 0x03) {
