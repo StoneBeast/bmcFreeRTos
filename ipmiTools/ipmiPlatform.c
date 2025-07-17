@@ -184,6 +184,16 @@ uint16_t __USER_IMPLEMENTATION read_sdr6_sensor_data(void)
     return nct75_read_rawData(&nct75_1);
 }
 
+void __USER_IMPLEMENTATION close_battery(void)
+{
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+}
+
+void __USER_IMPLEMENTATION battery_warn(void)
+{
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_RESET);
+}
+
 // 侦听完成回调函数（完成一次完整的i2c通信以后会进入该函数）
 void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
 {

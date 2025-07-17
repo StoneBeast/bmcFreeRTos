@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-17 10:32:41
+ * @LastEditTime : 2025-07-17 18:48:42
  * @Description  : ipmi功能实现
  */
 
@@ -40,6 +40,7 @@ static Sdr_index_t sdr_index;
 static sensor_ev_t g_event_arr[EVENT_MAX_COUNT];
 static uint8_t event_count = 0;
 static uint8_t event_arr_p = 0;
+static uint8_t battery_flag = 0;
 
 extern link_list_manager *g_timer_task_manager;
 #if USE_DEBUG_CMD == 1
@@ -622,7 +623,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
         /* data unit code */
         temp_r_sdr.sdr.data_unit_code = temp_recv.msg[RESPONSE_DATA_START+4];
         /* is data signed */
-        temp_r_sdr.sdr.data_unit_code = temp_recv.msg[RESPONSE_DATA_START+5];
+        temp_r_sdr.sdr.is_data_signed = temp_recv.msg[RESPONSE_DATA_START + 5];
         /* read data */
         memcpy(&(temp_r_sdr.sdr.read_data), &(temp_recv.msg[RESPONSE_DATA_START+6]), 2);
         /* higher th */
@@ -842,6 +843,14 @@ static void update_sensor_data_task_func(void)
 #endif // !USE_DEBUG_CMD == 1
 
     for (uint8_t i = 0; i < sdr_index.sdr_count; i++) {
+
+        if ((i+1 == 0x02) && (battery_flag == 1)) { /* 已经测量过电池 */
+            continue;
+        } else if ((i+1 == 0x02) && (battery_flag == 0)) {
+            battery_flag = 1;
+            close_battery();
+        }
+
         /* 向sdr更新数据 */
         sdr_setData(&sdr_index, i+1, data[i]);
 
@@ -861,6 +870,9 @@ static void update_sensor_data_task_func(void)
 
         if(is_over)
         {
+            if ((i+1 == 0x02) && (battery_flag == 0))
+                battery_warn();
+
             /* 地址 */
             temp_p.addr = g_local_addr;
 

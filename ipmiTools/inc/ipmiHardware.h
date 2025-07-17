@@ -31,4 +31,7 @@ uint16_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void);
 uint16_t __USER_IMPLEMENTATION read_sdr5_sensor_data(void);
 uint16_t __USER_IMPLEMENTATION read_sdr6_sensor_data(void);
 
+void __USER_IMPLEMENTATION close_battery(void);
+void __USER_IMPLEMENTATION battery_warn(void);
+
 #endif // !__IPMI_HARDWARE_H

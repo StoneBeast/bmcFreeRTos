@@ -59,6 +59,17 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /* 电池开关 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  /* 输出高，打开开关，可以测量电池电压 */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+
+  /* 电池报警灯 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+  /* 输出高，电池报警灯灭 */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
 }
 
 /* USER CODE BEGIN 2 */
