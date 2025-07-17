@@ -238,7 +238,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_V, 0,
                     0x0000FFFF, 0x00,
                     read_sdr2_sensor_data,
-                    8056, -7, "ADC02", 5);
+                    16113, -7, "ADC02", 5);
 
     /* 03: ADC03 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[2],
@@ -246,7 +246,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_V, 0,
                     0x0000FFFF, 0x00,
                     read_sdr3_sensor_data,
-                    8056, -7, "ADC03", 5);
+                    16113, -7, "ADC03", 5);
 
     /* 04: ADC04 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[3],
@@ -254,7 +254,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_V, 0,
                     0x0000FFFF, 0x00,
                     read_sdr4_sensor_data,
-                    8056, -7, "ADC04", 5);
+                    16113, -7, "ADC04", 5);
 
     /* 05: Temper01 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[4],
