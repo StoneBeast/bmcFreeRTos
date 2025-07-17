@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-14 16:50:59
+ * @LastEditTime : 2025-07-17 10:32:41
  * @Description  : ipmi功能实现
  */
 
@@ -587,6 +587,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     ipmb_recv_t temp_recv;
     uint8_t* p_res_data;
     uint8_t target_sdr_index = 0x00;
+    Res_sdr_t temp_r_sdr;
     // uint16_t start_addr;
 
     if (ipmi_addr != g_local_addr)
@@ -607,11 +608,38 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
     
         if (recv_ret == pdFALSE) /* 接收失败 */
             return NULL;
-    
-        *res_len = temp_recv.msg_len - RESPONSE_FORMAT_LEN;
+
+        *res_len   = sizeof(Res_sdr_t);
         p_res_data = malloc(*res_len);
-    
-        memcpy(p_res_data, (temp_recv.msg)+RESPONSE_DATA_START, *res_len);
+        /* next id */
+        temp_r_sdr.id = temp_recv.msg[RESPONSE_DATA_START];
+        /* dev_addr */
+        temp_r_sdr.sdr.dev_addr = temp_recv.msg[RESPONSE_DATA_START+1];
+        /* sdr id */
+        temp_r_sdr.sdr.sdr_id = temp_recv.msg[RESPONSE_DATA_START+2];
+        /* sensor type */
+        temp_r_sdr.sdr.sensor_type = temp_recv.msg[RESPONSE_DATA_START+3];
+        /* data unit code */
+        temp_r_sdr.sdr.data_unit_code = temp_recv.msg[RESPONSE_DATA_START+4];
+        /* is data signed */
+        temp_r_sdr.sdr.data_unit_code = temp_recv.msg[RESPONSE_DATA_START+5];
+        /* read data */
+        memcpy(&(temp_r_sdr.sdr.read_data), &(temp_recv.msg[RESPONSE_DATA_START+6]), 2);
+        /* higher th */
+        memcpy(&(temp_r_sdr.sdr.higher_threshold), &(temp_recv.msg[RESPONSE_DATA_START+8]), 2);
+        /* lower th */
+        memcpy(&(temp_r_sdr.sdr.lower_threshold), &(temp_recv.msg[RESPONSE_DATA_START+10]), 2);
+        /* arg M */
+        memcpy(&(temp_r_sdr.sdr.argM), &(temp_recv.msg[RESPONSE_DATA_START+12]), 2);
+        /* arg K2 */
+        memcpy(&(temp_r_sdr.sdr.argK2), &(temp_recv.msg[RESPONSE_DATA_START+14]), 2);
+        /* sensor name len */
+        temp_r_sdr.sdr.name_len = temp_recv.msg[RESPONSE_DATA_START+16];
+        /* sensor name */
+        memcpy(temp_r_sdr.sdr.sensor_name, &(temp_recv.msg[RESPONSE_DATA_START + 17]), temp_r_sdr.sdr.name_len);
+
+        memcpy(p_res_data, &temp_r_sdr, sizeof(Res_sdr_t));
+        ((Res_sdr_t *)p_res_data)->sdr.sensor_read = (void*)0xF0F0F0F0;
     }
     else
     {
