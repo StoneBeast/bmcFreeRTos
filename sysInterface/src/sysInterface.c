@@ -52,6 +52,7 @@ void init_sysInterface(void)
  */
 void sys_request_handler(void)
 {
+    //TODO: 有限替换malloc为freertos中的api，减少内存碎片
     sys_req_t req; /* 接收请求 */
 
     sys_req_queue = xQueueCreate(6, sizeof(sys_req_t));
