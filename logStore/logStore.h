@@ -3,7 +3,7 @@
  * @Date         : 2025-03-11 18:10:39
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-04 15:10:22
+ * @LastEditTime : 2025-07-22 11:02:39
  * @Description  : 存放日志存储功能相关参数设置以及定义等
  */
 
@@ -20,7 +20,7 @@
 #define RX_BUFFER_MAX_LEN       2560
 
 #define MIN_AVAILABLE_SPACE 1000
-#define WAIT_LOG_US             5*1000
+#define WAIT_LOG_US             1*1000
 extern uint8_t rx_buf_0[RX_BUFFER_MAX_LEN];
 extern uint16_t rx_buf_0_len;
 extern uint16_t rx_buf_0_last_len;
