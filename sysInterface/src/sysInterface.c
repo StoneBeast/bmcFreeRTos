@@ -54,7 +54,7 @@ void sys_request_handler(void)
 {
     sys_req_t req; /* 接收请求 */
 
-    sys_req_queue = xQueueCreate(2, sizeof(sys_req_t));
+    sys_req_queue = xQueueCreate(6, sizeof(sys_req_t));
     ack_queue = xQueueCreate(1, sizeof(sys_req_t));
 
     while (1)
