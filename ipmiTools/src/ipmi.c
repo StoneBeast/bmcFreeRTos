@@ -772,6 +772,9 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
 
         /* number 1Byte */
         ret_data[temp_point++] = temp_res_data->sdr.sdr_id;
+        
+        /* signed 1Byte */
+        ret_data[temp_point++] = temp_res_data->sdr.is_data_signed;
 
         /* raw data 2Byte */
         memcpy(&(ret_data[temp_point]), &(temp_res_data->sdr.read_data), 2);
