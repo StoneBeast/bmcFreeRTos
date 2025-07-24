@@ -66,7 +66,7 @@
         },
         "OpenOCD": {
           "bin": "",
-          "target": "${workspaceFolder}/.eide/stm32f1x",
+          "target": "stm32f1x",
           "interface": "${workspaceFolder}/.eide/stlink",
           "baseAddr": "0x08000000"
         },
