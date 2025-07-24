@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-14 14:30:20
+ * @LastEditTime : 2025-07-24 15:59:06
  * @Description  : 
  */
 
@@ -24,10 +24,15 @@ static void get_sensor_list_handler(uint8_t ipmi_addr);
 static void get_event(void);
 static void response(uint8_t* res, uint16_t res_len);
 
+static sys_req_t sys_req_ring[10];
+static uint8_t sys_req_ring_head = 0;
+static uint8_t sys_req_ring_tail = 0;
+#define P_INCREASE(p) ((p==9)?(0):(p+1))
+
 static sys_req_t request_recv_buffer;           /* 接收请求buffer */
 static uint8_t send_buffer[BUFFER_LEN] = {0};   /* 发送响应的buffer，最大长度为 BUFFER_LEN */
 // TODO: 不确定是否要使用队列，消息缓冲区等也可以考虑
-QueueHandle_t sys_req_queue;                    /* 存放请求的队列 */
+// QueueHandle_t sys_req_queue;                    /* 存放请求的队列 */
 QueueHandle_t ack_queue;
 
 #if USE_DEBUG_CMD == 1
@@ -55,12 +60,19 @@ void sys_request_handler(void)
     //TODO: 有限替换malloc为freertos中的api，减少内存碎片
     sys_req_t req; /* 接收请求 */
 
-    sys_req_queue = xQueueCreate(6, sizeof(sys_req_t));
+    // sys_req_queue = xQueueCreate(6, sizeof(sys_req_t));
     ack_queue = xQueueCreate(1, sizeof(sys_req_t));
 
     while (1)
     {
-        xQueueReceive(sys_req_queue, &req, portMAX_DELAY);
+        // xQueueReceive(sys_req_queue, &req, portMAX_DELAY);
+        if (sys_req_ring_head == sys_req_ring_tail) {
+            vTaskDelay(20);
+            continue;
+        }
+
+        memcpy(&req, &(sys_req_ring[sys_req_ring_head]), sizeof(sys_req_t));
+        sys_req_ring_head = P_INCREASE(sys_req_ring_head);
 
         if (req.request_msg[MSG_TYPE_OFFSET] == SYS_MSG_TYPE_REQ) {
             switch (req.request_msg[MSG_CODE_OFFSET]) {
@@ -267,11 +279,10 @@ static void get_card_list_handler(void)
 {
     uint8_t* card_addr_list = NULL;
     uint16_t card_count = 0;
-    uint8_t* ret_msg = NULL;
+    uint8_t ret_msg[15] = {0};
 
     card_addr_list = scan_device(&card_count);
-    ret_msg = malloc(MSG_FORMAT_LENGTH+1+card_count);
-    memset(ret_msg, 0, MSG_FORMAT_LENGTH + 1 + card_count);
+    memset(ret_msg, 0, 15);
 
     ret_msg[MSG_TYPE_OFFSET] = SYS_MSG_TYPE_RES;
     ret_msg[MSG_CODE_OFFSET] = SYS_CMD_DEVICE_LIST;
@@ -285,7 +296,6 @@ static void get_card_list_handler(void)
     free(card_addr_list);
 
     response(ret_msg, MSG_FORMAT_LENGTH+1+card_count);
-    free(ret_msg);
 }
 
 /*** 
@@ -309,7 +319,7 @@ static void get_sensor_list_handler(uint8_t ipmi_addr)
     *((uint16_t *)&(ret_msg[MSG_LEN_OFFSET])) = sensor_list_len;
     memcpy(&(ret_msg[MSG_DATA_OFFSET]), sensor_list, sensor_list_len);
 
-    free(sensor_list);
+    vPortFree(sensor_list);
     ret_msg[MSG_DATA_OFFSET + sensor_list_len] = get_checksum(ret_msg, MSG_DATA_OFFSET + sensor_list_len);
     // memcpy(&(ret_msg[MSG_DATA_OFFSET + sensor_list_len]), &chk, 2);
     response(ret_msg, MSG_FORMAT_LENGTH+sensor_list_len);
@@ -410,20 +420,26 @@ void USART1_IRQHandler(void)
             request_recv_buffer.request_msg[request_recv_buffer.request_len++] = rc;
     }
 
+    /* 
+        FIXME:  这里req使用了环形队列，而没有使用freertos提供的队列
+                这里仅作测试用。
+    */
     else if (get_interface_uart_it_flag(SYSINTERFACE_IT_IDLE) != 0) /* idle中断触发，完成一帧数据帧接收 */
     {
         if (0 == check_msg(request_recv_buffer.request_msg, request_recv_buffer.request_len)) {
             if (request_recv_buffer.request_msg[0] == 0x03) {
                 xQueueSendFromISR(ack_queue, &request_recv_buffer, &is_yield);
+                portYIELD_FROM_ISR(is_yield);
             } else {
-                xQueueSendFromISR(sys_req_queue, &request_recv_buffer, &is_yield);
+                memcpy(&(sys_req_ring[sys_req_ring_tail]), &request_recv_buffer, sizeof(sys_req_t));
+                sys_req_ring_tail = P_INCREASE(sys_req_ring_tail);
+                // xQueueSendFromISR(sys_req_queue, &request_recv_buffer, &is_yield);
             }
         }
 
         request_recv_buffer.request_len = 0;
         clear_interface_uart_idel_it_flag();
 
-        portYIELD_FROM_ISR(is_yield);
         is_yield = pdTRUE;
     }
 }
