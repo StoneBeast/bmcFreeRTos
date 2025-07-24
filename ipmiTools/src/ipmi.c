@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-17 18:48:42
+ * @LastEditTime : 2025-07-23 17:01:25
  * @Description  : ipmi功能实现
  */
 
@@ -40,7 +40,7 @@ static Sdr_index_t sdr_index;
 static sensor_ev_t g_event_arr[EVENT_MAX_COUNT];
 static uint8_t event_count = 0;
 static uint8_t event_arr_p = 0;
-static uint8_t battery_flag = 0;
+volatile static uint8_t battery_flag = 0;
 
 extern link_list_manager *g_timer_task_manager;
 #if USE_DEBUG_CMD == 1
@@ -215,8 +215,10 @@ static void res_handle_task_func(void)
         temp = (ipmb_recv_t*)(ipmi_res_manager->find_by_pos(&(ipmi_res_manager->list), (ipmi_res_manager->node_number)-1));
         rqSeq = ((temp->msg[4])>>2);
         
-        /* 通过消息队列发送消息到请求线程 */
-        xQueueSend(res_queue, temp, portMAX_DELAY);
+        if (temp != NULL) {
+            /* 通过消息队列发送消息到请求线程 */
+            xQueueSend(res_queue, temp, pdMS_TO_TICKS(300));
+        }
 
         /* 删除请求和响应，并释放rqseq */
         ipmi_request_manager->delete_by_id(&(ipmi_request_manager->list), &(rqSeq));
@@ -611,7 +613,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
             return NULL;
 
         *res_len   = sizeof(Res_sdr_t);
-        p_res_data = malloc(*res_len);
+        p_res_data = pvPortMalloc(*res_len);
         /* next id */
         temp_r_sdr.id = temp_recv.msg[RESPONSE_DATA_START];
         /* dev_addr */
@@ -665,7 +667,7 @@ static uint8_t* get_device_sdr(uint8_t ipmi_addr, uint16_t record_id, uint8_t* r
         }
 
         *res_len = sizeof(Res_sdr_t);
-        p_res_data = malloc(sizeof(Res_sdr_t));
+        p_res_data = pvPortMalloc(sizeof(Res_sdr_t));
 
         /* 最后一个sdr */
         if (target_sdr_index == (sdr_index.sdr_count - 1)) {
@@ -748,13 +750,13 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
 
     if (sensor_num == 0) {
         *ret_data_len = 1;
-        ret_data = malloc(1);
+        ret_data = pvPortMalloc(1);
         ret_data[0] = 0;
         return ret_data;
     }
 
     /* 这里把name的长度限制到了16Byte */
-    ret_data = malloc(1+sensor_num*sizeof(Sdr_t));
+    ret_data = pvPortMalloc(1 + sensor_num * sizeof(Sdr_t));
     memset(ret_data, 0, 1 + sensor_num * sizeof(Sdr_t));
     ret_data[0] = sensor_num;
     temp_point = 1;
@@ -805,7 +807,8 @@ uint8_t* get_sensor_list(uint8_t ipmi_addr, uint16_t* ret_data_len)
 
         temp_point += ret_data[temp_point - 1];
 
-        free(temp_res_data);
+        // free(temp_res_data);
+        vPortFree(temp_res_data);
     } while (0 != next_id);
     
     *ret_data_len = temp_point;
@@ -873,8 +876,9 @@ static void update_sensor_data_task_func(void)
 
         if(is_over)
         {
-            if ((i+1 == 0x02) && (battery_flag == 0))
+            if ((i+1 == 0x02) && (battery_flag == 1)) {
                 battery_warn();
+            }
 
             /* 地址 */
             temp_p.addr = g_local_addr;
