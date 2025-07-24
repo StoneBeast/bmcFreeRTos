@@ -20,7 +20,7 @@ static void task_timeout_handler(void *task_handle)
     uint32_t now_tick = get_sys_ticks();
 
     timer_task_t *timer_task = (timer_task_t *)task_handle;
-    if (now_tick >= timer_task->time_until) {   /* 超时则执行超时函数 */
+    if ((int32_t)((uint32_t)(timer_task->time_until-now_tick)) < 0) {   /* 超时则执行超时函数 */
         timer_task->task_func();
         timer_task->time_until = timer_task->time_interval + now_tick;
     }
