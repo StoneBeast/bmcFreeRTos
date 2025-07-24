@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-11 11:07:45
+ * @LastEditTime : 2025-07-23 16:51:12
  * @Description  : SDR相关操作函数
  */
 
@@ -230,15 +230,15 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_A, 0,
                     0x0000FFFF, 0x00,
                     read_sdr1_sensor_data,
-                    32226, -7, "ADC01", 5);
+                    32226, -7, "12V_MON", 7);
 
     /* 02: ADC02 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[1],
                     0x02, g_local_addr, SENSOR_TYPE_VOLTAGE,
                     SENSOR_UNIT_CODE_V, 0,
-                    0x0000FFFF, 0x00,
+                    0x0000FFFF, 0x4D9,
                     read_sdr2_sensor_data,
-                    16113, -7, "ADC02", 5);
+                    16113, -7, "BAT_MON", 7);
 
     /* 03: ADC03 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[2],
@@ -246,7 +246,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_V, 0,
                     0x0000FFFF, 0x00,
                     read_sdr3_sensor_data,
-                    16113, -7, "ADC03", 5);
+                    16113, -7, "GBE_1V1", 7);
 
     /* 04: ADC04 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[3],
@@ -254,7 +254,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_V, 0,
                     0x0000FFFF, 0x00,
                     read_sdr4_sensor_data,
-                    16113, -7, "ADC04", 5);
+                    16113, -7, "P3V3", 4);
 
     /* 05: Temper01 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[4],
@@ -262,7 +262,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_DC, 1,
                     0x00007FFF, 0x00,
                     read_sdr5_sensor_data,
-                    625, -4, "TMP01", 5);
+                    625, -4, "TMP_A", 5);
 
     /* 06: Temper02 */
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[5],
@@ -270,7 +270,7 @@ void init_sdr(Sdr_index_t * sdr_index)
                     SENSOR_UNIT_CODE_DC, 1,
                     0x00007FFF, 0x00,
                     read_sdr6_sensor_data,
-                    625, -4, "TMP02", 5);
+                    625, -4, "TMP_B", 5);
 }
 
 uint8_t sdr_setData(Sdr_index_t *sdr, uint8_t sdr_id, uint16_t data)
