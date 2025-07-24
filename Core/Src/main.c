@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-06-04 16:12:07
+ * @LastEditTime : 2025-07-24 14:29:35
  * @Description  : main.c
  */
 
@@ -307,8 +307,8 @@ void writeFile(void *arg)
     /* 关闭接收日志串口中断 */
     disable_log_uart();
     /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
-    xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 1, req_Stack, &req_TaskBuffer);
-    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 5, req_Stack, &req_TaskBuffer);
+    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 3, bg_Stack, &bg_TaskBuffer);
     /* 创建接下来的任务后删除当前任务 */
     vTaskDelete(NULL);
 }
