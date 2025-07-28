@@ -349,6 +349,8 @@ static void get_event(void)
         data_len++;
         ret_msg[msg_point++] = temp_event.sensor_no;
         data_len++;
+        ret_msg[msg_point++] = temp_event.is_signed;
+        data_len++;
         memcpy(&(ret_msg[msg_point]), &(temp_event.min_val), 2);
         msg_point += 2;
         data_len += 2;

@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 16:56:54
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-23 17:01:25
+ * @LastEditTime : 2025-07-28 14:58:15
  * @Description  : ipmi功能实现
  */
 
@@ -23,8 +23,6 @@
 
 //  TODO: 释放rqSeq功能
 
-// fru_t g_fru;
-// sdr_index_info_t g_sdr_index;
 uint8_t g_local_addr = 0x00;                    /* 本机地址 */
 uint8_t re_seq_arr[64] = {0};                   /* req seq占用状态记录 */
 uint8_t g_ipmb_msg[64] = {0};                   /* ipmb消息接收数组 */
@@ -38,8 +36,8 @@ SemaphoreHandle_t event_queue_mutex;
 static Sdr_index_t sdr_index;
 
 static sensor_ev_t g_event_arr[EVENT_MAX_COUNT];
-static uint8_t event_count = 0;
-static uint8_t event_arr_p = 0;
+static uint8_t event_arr_tail = 0;
+static uint8_t event_arr_head = 0;
 volatile static uint8_t battery_flag = 0;
 
 extern link_list_manager *g_timer_task_manager;
@@ -343,42 +341,38 @@ uint8_t ipmi_response(uint8_t rq_sa, uint16_t NetFn_CMD, uint8_t cmpl_code, uint
 void push_event(sensor_ev_t ev)
 {
     xSemaphoreTake(event_queue_mutex, portMAX_DELAY);
-    event_count++;
-    if (event_count == EVENT_MAX_COUNT+1)
-        event_count = EVENT_MAX_COUNT;
 
-    g_event_arr[event_arr_p] = ev;
-
-    event_arr_p++;
-    event_arr_p %= EVENT_MAX_COUNT;
+    if (((event_arr_tail+1) % EVENT_MAX_COUNT) != event_arr_head) {
+        // event_arr_tail++;
+        memcpy(&g_event_arr[event_arr_tail], &ev, sizeof(sensor_ev_t));
+        event_arr_tail++;
+        event_arr_tail %= EVENT_MAX_COUNT;
+    }
     xSemaphoreGive(event_queue_mutex);
 }
 
 void push_event_from_isr(sensor_ev_t ev)
 {
     xSemaphoreTakeFromISR(event_queue_mutex, NULL);
-    event_count++;
-    if (event_count == EVENT_MAX_COUNT + 1)
-        event_count = EVENT_MAX_COUNT;
 
-    g_event_arr[event_arr_p] = ev;
+    if (((event_arr_tail + 1) % EVENT_MAX_COUNT) != event_arr_head) {
+        memcpy(&g_event_arr[event_arr_tail], &ev, sizeof(sensor_ev_t));
+        event_arr_tail++;
+        event_arr_tail %= EVENT_MAX_COUNT;
+    }
 
-    event_arr_p++;
-    event_arr_p %= EVENT_MAX_COUNT;
     xSemaphoreGiveFromISR(event_queue_mutex, NULL);
 }
 
 uint8_t pop_event(sensor_ev_t *ret)
 {
     xSemaphoreTake(event_queue_mutex, portMAX_DELAY);
-    if (event_count != 0) {
-        if (event_arr_p == 0)
-            event_arr_p = EVENT_MAX_COUNT;
 
-        event_arr_p--;
-        event_count--;
+    if (event_arr_head != event_arr_tail) {
+        memcpy(ret, &(g_event_arr[event_arr_head]), sizeof(sensor_ev_t));
+        event_arr_head++;
+        event_arr_head %= EVENT_MAX_COUNT;
 
-        *ret = g_event_arr[event_arr_p];
         xSemaphoreGive(event_queue_mutex);
 
         return 0;
@@ -391,15 +385,13 @@ uint8_t pop_event(sensor_ev_t *ret)
 uint8_t pop_event_from_isr(sensor_ev_t *ret)
 {
     xSemaphoreTakeFromISR(event_queue_mutex, NULL);
-    if (event_count != 0) {
-        if (event_arr_p == 0)
-            event_arr_p = EVENT_MAX_COUNT;
+    if (event_arr_head != event_arr_tail) {
+        memcpy(ret, &(g_event_arr[event_arr_head]), sizeof(sensor_ev_t));
+        event_arr_head++;
+        event_arr_head %= EVENT_MAX_COUNT;
 
-        event_arr_p--;
-        event_count--;
-
-        *ret = g_event_arr[event_arr_p];
         xSemaphoreGiveFromISR(event_queue_mutex, NULL);
+
         return 0;
     }
     xSemaphoreGiveFromISR(event_queue_mutex, NULL);
@@ -411,7 +403,8 @@ uint8_t get_event_count(void)
     uint8_t ret_count = 0;
 
     xSemaphoreTake(event_queue_mutex, portMAX_DELAY);
-    ret_count = event_count;
+    
+    ret_count = (event_arr_tail+EVENT_MAX_COUNT-event_arr_head) % EVENT_MAX_COUNT;
     xSemaphoreGive(event_queue_mutex);
 
     return ret_count;
@@ -422,7 +415,7 @@ uint8_t get_event_count_from_isr(void)
     uint8_t ret_count = 0;
 
     xSemaphoreTakeFromISR(event_queue_mutex, NULL);
-    ret_count = event_count;
+    ret_count = (event_arr_tail + EVENT_MAX_COUNT - event_arr_tail) % EVENT_MAX_COUNT;
     xSemaphoreGiveFromISR(event_queue_mutex, NULL);
 
     return ret_count;
@@ -456,6 +449,7 @@ uint8_t add_msg_list(uint8_t* msg, uint16_t len)
         temp_e.addr = msg[3];
         /* 传感器编号 */
         temp_e.sensor_no = msg[RESPONSE_DATA_START+EVENT_BODY_SENSOR_NO_OFFSET];
+        temp_e.is_signed = msg[RESPONSE_DATA_START + EVENT_BODY_IS_SIGNED_OFFSET];
         /* min, max, raw */
         memcpy(&(temp_e.min_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_MIN_VAL_OFFSET]), 2);
         memcpy(&(temp_e.max_val), &(msg[RESPONSE_DATA_START + EVENT_BODY_MAX_VAL_OFFSET]), 2);
@@ -885,6 +879,8 @@ static void update_sensor_data_task_func(void)
 
             /* 传感器编号 */
             temp_p.sensor_no = sdr_index.p_sdr_list[i]->sdr_id;
+
+            temp_p.is_signed = sdr_index.p_sdr_list[i]->is_data_signed;
 
             /* min */
             temp_p.min_val = sdr_index.p_sdr_list[i]->lower_threshold;
