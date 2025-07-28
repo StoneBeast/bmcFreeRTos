@@ -3,7 +3,7 @@
  * @Date         : 2025-03-28 18:26:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-07-24 15:59:06
+ * @LastEditTime : 2025-07-25 14:38:18
  * @Description  : 
  */
 
@@ -34,9 +34,10 @@ static uint8_t send_buffer[BUFFER_LEN] = {0};   /* 发送响应的buffer，最�
 // TODO: 不确定是否要使用队列，消息缓冲区等也可以考虑
 // QueueHandle_t sys_req_queue;                    /* 存放请求的队列 */
 QueueHandle_t ack_queue;
+extern TaskHandle_t sys_req_handler_task;
 
 #if USE_DEBUG_CMD == 1
-volatile uint8_t debug_read = 0;
+    volatile uint8_t debug_read = 0;
 #endif // !USE_DEBUG_CMD == 1
 
 /*** 
@@ -59,13 +60,18 @@ void sys_request_handler(void)
 {
     //TODO: 有限替换malloc为freertos中的api，减少内存碎片
     sys_req_t req; /* 接收请求 */
+    uint32_t ulNotifiedValue;
 
     // sys_req_queue = xQueueCreate(6, sizeof(sys_req_t));
     ack_queue = xQueueCreate(1, sizeof(sys_req_t));
 
     while (1)
     {
+        // xEventGroupWaitBits(req_event, 1, pdTRUE, pdFALSE, portMAX_DELAY);
         // xQueueReceive(sys_req_queue, &req, portMAX_DELAY);
+
+        xTaskNotifyWait(pdFALSE, 1, &ulNotifiedValue, portMAX_DELAY);
+
         if (sys_req_ring_head == sys_req_ring_tail) {
             vTaskDelay(20);
             continue;
@@ -99,24 +105,6 @@ void sys_request_handler(void)
                     break;
             }
         }
-#if USE_DEBUG_CMD == 1
-        else if (0 == memcmp(req.request_msg, DEBUG_CMD_PREFIX, strlen(DEBUG_CMD_PREFIX))) {
-            /* 使用调试命令 */
-            switch (*((req.request_msg)+strlen(DEBUG_CMD_PREFIX)))
-            {
-            case DEBUG_CMD_READ_AD: /* 循环上报AD值 */
-                /* 这里可以通过向任务链表注册新的定时任务实现，但是需要额外实现删除的功能 */
-                if (debug_read == 1)
-                    debug_read = 0;
-                else
-                    debug_read = 1;
-                break;
-            
-            default:
-                break;
-            }
-        }
-#endif // !USE_DEBUG_CMD == 1
     }
 }
 
@@ -433,7 +421,10 @@ void USART1_IRQHandler(void)
             } else {
                 memcpy(&(sys_req_ring[sys_req_ring_tail]), &request_recv_buffer, sizeof(sys_req_t));
                 sys_req_ring_tail = P_INCREASE(sys_req_ring_tail);
+                // xEventGroupSetBitsFromISR(req_event, 1, NULL);
                 // xQueueSendFromISR(sys_req_queue, &request_recv_buffer, &is_yield);
+                xTaskNotifyFromISR(sys_req_handler_task, 1, eSetBits, &is_yield);
+                portYIELD_FROM_ISR(is_yield);
             }
         }
 

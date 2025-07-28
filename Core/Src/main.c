@@ -72,6 +72,7 @@ TaskHandle_t writeFile_task;
 SemaphoreHandle_t uart_mutex;  /* uart访问互斥量 */
 
 link_list_manager* g_timer_task_manager;
+TaskHandle_t sys_req_handler_task;
 
 /* USER CODE END PV */
 
@@ -268,7 +269,7 @@ void writeFile(void *arg)
         }
 
         /* 等待开始 */
-        wait_ret = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WAIT_LOG_US));
+        wait_ret = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WAIT_LOG_MS));
         if (wait_ret == 1) {
             PRINTF("start\r\n");
 
@@ -303,11 +304,10 @@ void writeFile(void *arg)
     } else {
         PRINTF("mount fs failed\r\n");
     }
-
     /* 关闭接收日志串口中断 */
     disable_log_uart();
     /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
-    xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 5, req_Stack, &req_TaskBuffer);
+    sys_req_handler_task = xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 5, req_Stack, &req_TaskBuffer);
     xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 3, bg_Stack, &bg_TaskBuffer);
     /* 创建接下来的任务后删除当前任务 */
     vTaskDelete(NULL);

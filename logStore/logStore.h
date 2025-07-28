@@ -20,7 +20,7 @@
 #define RX_BUFFER_MAX_LEN       2560
 
 #define MIN_AVAILABLE_SPACE 1000
-#define WAIT_LOG_US             1*1000
+#define WAIT_LOG_MS             1*1000
 extern uint8_t rx_buf_0[RX_BUFFER_MAX_LEN];
 extern uint16_t rx_buf_0_len;
 extern uint16_t rx_buf_0_last_len;
