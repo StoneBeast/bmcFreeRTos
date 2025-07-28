@@ -260,7 +260,7 @@ void init_sdr(Sdr_index_t * sdr_index)
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[4],
                     0x05, g_local_addr, SENSOR_TYPE_TEMPERATURE,
                     SENSOR_UNIT_CODE_DC, 1,
-                    0x00007FFF, 0x00,
+                    0x00007FFF, 0x9001,
                     read_sdr5_sensor_data,
                     625, -4, "TMP_A", 5);
 
@@ -268,7 +268,7 @@ void init_sdr(Sdr_index_t * sdr_index)
     FILL_SDR_STRUCT(sdr_index->p_sdr_list[5],
                     0x06, g_local_addr, SENSOR_TYPE_TEMPERATURE,
                     SENSOR_UNIT_CODE_DC, 1,
-                    0x00007FFF, 0x00,
+                    0x00007FFF, 0x9001,
                     read_sdr6_sensor_data,
                     625, -4, "TMP_B", 5);
 }
