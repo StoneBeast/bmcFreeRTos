@@ -3,7 +3,7 @@
  * @Date         : 2025-03-11 18:10:39
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-24 16:05:22
+ * @LastEditTime : 2025-07-22 11:02:39
  * @Description  : 存放日志存储功能相关参数设置以及定义等
  */
 
@@ -20,6 +20,7 @@
 #define RX_BUFFER_MAX_LEN       2560
 
 #define MIN_AVAILABLE_SPACE 1000
+#define WAIT_LOG_MS             1*1000
 extern uint8_t rx_buf_0[RX_BUFFER_MAX_LEN];
 extern uint16_t rx_buf_0_len;
 extern uint16_t rx_buf_0_last_len;
@@ -28,13 +29,13 @@ extern uint16_t rx_buf_1_len;
 extern uint16_t rx_buf_1_last_len;
 extern uint8_t current_buf;
 extern uint8_t fs_flag;
-extern uint8_t start_flag;
 extern uint8_t end_flag;
 extern W25QXX_HandleTypeDef w25qxx;
 extern lfs_t lfs;
 
 void init_logStore_hardware(void);
+void disable_log_uart(void);
 uint16_t mount_fs(void);
-void register_fs_ops(void);
+uint16_t get_file_count(void);
 
 #endif // !__LOG_STORE_H

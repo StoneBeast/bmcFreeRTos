@@ -7,9 +7,11 @@
     "Drivers",
     "Middlewares",
     "linkList",
-    "uartConsole",
     "ipmiTools",
-    "logStore"
+    "logStore",
+    "sysInterface",
+    "myTask",
+    "nct75Driver"
   ],
   "virtualFolder": {
     "name": "<virtual_root>",
@@ -35,25 +37,48 @@
           "RAM": [],
           "ROM": []
         },
-        "options": "null"
+        "options": "null",
+        "archExtensions": ""
       },
-      "uploader": "OpenOCD",
+      "uploader": "JLink",
       "uploadConfig": {
         "bin": "",
-        "target": "stm32f1x",
-        "interface": "stlink",
-        "baseAddr": "0x08000000"
+        "baseAddr": "",
+        "cpuInfo": {
+          "vendor": "ST",
+          "cpuName": "STM32F103RC"
+        },
+        "proType": 1,
+        "speed": 5000,
+        "otherCmds": ""
       },
       "uploadConfigMap": {
         "JLink": {
           "bin": "",
           "baseAddr": "",
           "cpuInfo": {
-            "vendor": "null",
-            "cpuName": "null"
+            "vendor": "ST",
+            "cpuName": "STM32F103RC"
           },
           "proType": 1,
-          "speed": 8000,
+          "speed": 5000,
+          "otherCmds": ""
+        },
+        "OpenOCD": {
+          "bin": "",
+          "target": "stm32f1x",
+          "interface": "${workspaceFolder}/.eide/stlink",
+          "baseAddr": "0x08000000"
+        },
+        "STLink": {
+          "bin": "",
+          "proType": "SWD",
+          "resetMode": "default",
+          "runAfterProgram": true,
+          "speed": 4000,
+          "address": "0x08000000",
+          "elFile": "None",
+          "optionBytes": ".eide/debug.st.option.bytes.ini",
           "otherCmds": ""
         }
       },
@@ -68,14 +93,16 @@
           "Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM3",
           "Drivers/CMSIS/Device/ST/STM32F1xx/Include",
           "Drivers/CMSIS/Include",
-          "uartConsole/inc",
           "linkList",
-          "uartConsole",
           "ipmiTools",
           "ipmiTools/inc",
           "logStore/littlefs",
           "logStore/w25qxDriver",
-          "logStore"
+          "logStore",
+          "sysInterface",
+          "sysInterface/inc",
+          "myTask",
+          "nct75Driver"
         ],
         "libList": [],
         "defineList": [
@@ -96,25 +123,21 @@
           "c/cpp-compiler": {
             "language-c": "c11",
             "language-cpp": "c++11",
-            "optimization": "level-debug",
+            "optimization": "level-0",
             "warnings": "all-warnings",
             "one-elf-section-per-function": true,
-            "one-elf-section-per-data": true,
-            "C_FLAGS": "",
-            "CXX_FLAGS": ""
+            "one-elf-section-per-data": true
           },
-          "asm-compiler": {
-            "ASM_FLAGS": ""
-          },
+          "asm-compiler": {},
           "linker": {
             "output-format": "elf",
             "remove-unused-input-sections": true,
-            "LD_FLAGS": "",
-            "LIB_FLAGS": "-lm -u _printf_float"
+            "LIB_FLAGS": "-lm -u _printf_float",
+            "$toolName": "auto"
           }
         }
       }
     }
   },
-  "version": "3.5"
+  "version": "3.6"
 }

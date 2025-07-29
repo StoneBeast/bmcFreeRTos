@@ -3,7 +3,7 @@
  * @Date         : 2025-02-17 16:13:25
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-24 17:42:02
+ * @LastEditTime : 2025-07-24 14:29:35
  * @Description  : main.c
  */
 
@@ -33,16 +33,16 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "uartConsole.h"
 #include "bmc.h"
 #include <stdlib.h>
 #include "logStore.h"
 #include "ipmiHardware.h"
 #include <string.h>
 #include <stdio.h>
+#include "sysInterface.h"
+#include "my_task.h"
 
 //TODO: 使用vTaskDelay替换阻塞延时
-//TODO: RAM瓶颈！
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,11 +64,15 @@
 
 /* USER CODE BEGIN PV */
 StackType_t bg_Stack[880];     /* bgTask静态栈 */
-StackType_t c_Stack[1024*2];   /* consoleTask静态栈 */
+StackType_t req_Stack[880*2];   /* consoleTask静态栈 */
 StaticTask_t bg_TaskBuffer;    /* bgTask buffer */
-StaticTask_t c_TaskBuffer;     /* consoleTask buffer */
+StaticTask_t req_TaskBuffer;     /* consoleTask buffer */
+TaskHandle_t writeFile_task;
 
 SemaphoreHandle_t uart_mutex;  /* uart访问互斥量 */
+
+link_list_manager* g_timer_task_manager;
+TaskHandle_t sys_req_handler_task;
 
 /* USER CODE END PV */
 
@@ -77,9 +81,11 @@ void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
-void startConsole(void *arg);
+void sys_req_handler(void *arg);
 void startBackgroundTask(void *arg);
 void writeFile(void *arg);
+
+static void led_blink(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -122,19 +128,25 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 #endif //! 0
-    /* 初始化uartConsole使用到的硬件 */
-    init_hardware();
-    /* 初始化uartConsole中的任务以及后台任务队列 */
-    init_console_task();
+    timer_task_t blink = {
+        .task_func = led_blink,
+        .task_name = "blink",
+        .time_interval = 500
+    };
+
+    init_sysInterface();
+
+    g_timer_task_manager = init_task_list();
+    timer_task_register(g_timer_task_manager, &blink);
     /* 初始化bmc */
     init_bmc();
 
-    register_fs_ops();
+    // register_fs_ops();
 
     /* 获取串口访问互斥量实例 */
     uart_mutex = xSemaphoreCreateMutex();
 
-    xTaskCreate(writeFile, "logStoage", 512, NULL, 5, NULL);
+    xTaskCreate(writeFile, "logStoage", 512, NULL, 5, &writeFile_task);
 
     /* USER CODE END 2 */
 
@@ -185,6 +197,8 @@ void SystemClock_Config(void)
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
+    HAL_Delay(10);
+
     if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
         Error_Handler();
     }
@@ -197,20 +211,14 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-/***
- * @brief uartConsole task函数
- * @param arg [void*]       该task中不使用arg
+/*** 
+ * @brief task function, 处理系统接口发送的消息
+ * @param *arg [void]   参数
  * @return [void]
  */
-void startConsole(void *arg)
+void sys_req_handler(void *arg)
 {
-    if (fs_flag)
-        PRINTF("mount fs success\r\n");
-    else
-        PRINTF("mount fs failed\r\n");
-
-    /* 启动uartConsole */
-    console_start();
+    sys_request_handler();
 }
 
 /***
@@ -220,9 +228,11 @@ void startConsole(void *arg)
  */
 void startBackgroundTask(void *arg)
 {
+    /* 开启ipmb监听 */
+    HAL_I2C_EnableListen_IT(&hi2c1);
     /* 轮询是否有后台任务需要执行 */
     while (1) {
-        run_background_task();
+        task_handler(g_timer_task_manager);
     }
 }
 
@@ -238,6 +248,7 @@ void writeFile(void *arg)
     char log_file_name[6];          /* log文件名 */
     int f_res;                      /* fs操作结果 */
     lfs_file_t log_file;            /* log文件实例 */
+    uint32_t wait_ret;
 
     /* 初始化该功能使用到的硬件 */
     init_logStore_hardware();
@@ -258,43 +269,58 @@ void writeFile(void *arg)
         }
 
         /* 等待开始 */
-        while (start_flag == 0);
-        PRINTF("start\r\n");
+        wait_ret = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(WAIT_LOG_MS));
+        if (wait_ret == 1) {
+            PRINTF("start\r\n");
 
-        while ((rx_buf_0_last_len != rx_buf_0_len || rx_buf_1_last_len != rx_buf_1_len) && (rx_buf_0_len + rx_buf_1_len) != 0) {
-            vTaskDelay(25/portTICK_PERIOD_MS);
-            /* 采用ping-pong buffer，接收和写入不使用同一个buffer */
-            if (current_buf == 0) {
-                current_buf       = 1;
-                rx_buf_0_last_len = rx_buf_0_len;
-                rx_buf_0_len      = 0;
-                lfs_file_write(&lfs, &log_file, rx_buf_0, rx_buf_0_last_len);
-            } else {
-                current_buf       = 0;
-                rx_buf_1_last_len = rx_buf_1_len;
-                rx_buf_1_len      = 0;
-                lfs_file_write(&lfs, &log_file, rx_buf_1, rx_buf_1_last_len);
+            while ((rx_buf_0_last_len != rx_buf_0_len || rx_buf_1_last_len != rx_buf_1_len) && (rx_buf_0_len + rx_buf_1_len) != 0) {
+                vTaskDelay(25 / portTICK_PERIOD_MS);
+                /* 采用ping-pong buffer，接收和写入不使用同一个buffer */
+                if (current_buf == 0) {
+                    current_buf       = 1;
+                    rx_buf_0_last_len = rx_buf_0_len;
+                    rx_buf_0_len      = 0;
+                    lfs_file_write(&lfs, &log_file, rx_buf_0, rx_buf_0_last_len);
+                } else {
+                    current_buf       = 0;
+                    rx_buf_1_last_len = rx_buf_1_len;
+                    rx_buf_1_len      = 0;
+                    lfs_file_write(&lfs, &log_file, rx_buf_1, rx_buf_1_last_len);
+                }
+                vTaskDelay(25 / portTICK_PERIOD_MS);
             }
-            vTaskDelay(25 / portTICK_PERIOD_MS);
+
+            /* 置位结束标志位 */
+            end_flag = 1;
+
+            lfs_file_close(&lfs, &log_file);
+            PRINTF("write finished\r\n");
+        } else {
+            //  timeout
+            lfs_file_close(&lfs, &log_file);
+            PRINTF("no log recv\r\n");
         }
-
-        /* 置位结束标志位 */
-        end_flag = 1;
-
-        lfs_file_close(&lfs, &log_file);
-        PRINTF("write finished\r\n");
 
     } else {
         PRINTF("mount fs failed\r\n");
     }
-
+    /* 关闭接收日志串口中断 */
+    disable_log_uart();
     /* 分别创建uartConsole任务以及后台任务轮询程序，采用静态创建的方式 */
-    xTaskCreateStatic(startConsole, "uartConsole", 1024 * 2, NULL, 1, c_Stack, &c_TaskBuffer);
-    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 1, bg_Stack, &bg_TaskBuffer);
+    sys_req_handler_task = xTaskCreateStatic(sys_req_handler, "sysReqHandler", 880 * 2, NULL, 5, req_Stack, &req_TaskBuffer);
+    xTaskCreateStatic(startBackgroundTask, "bgTask", 880, NULL, 3, bg_Stack, &bg_TaskBuffer);
     /* 创建接下来的任务后删除当前任务 */
     vTaskDelete(NULL);
 }
 
+/*** 
+ * @brief 运行指示灯闪烁
+ * @return [void]
+ */
+static void led_blink(void)
+{
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_8);
+}
 /* USER CODE END 4 */
 
 /**

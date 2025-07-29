@@ -1,6 +1,15 @@
+/*
+ * @Author       : stoneBeast
+ * @Date         : 2025-03-07 18:14:30
+ * @Encoding     : UTF-8
+ * @LastEditors  : stoneBeast
+ * @LastEditTime : 2025-07-10 11:02:35
+ * @Description  : 
+ */
 #ifndef __IPMI_SDR_H
 #define __IPMI_SDR_H
 
+#include <stdint.h>
 #include "ipmiConfig.h"
 
 /* SDR Header */
@@ -82,12 +91,27 @@
 #define SDR_UCT_LEN	                        0x01
 #define SDR_UNCT_OFFSET	                    0x26
 #define SDR_UNCT_LEN	                    0x01
+
+/*
+    为了保证精度，将这些数据分别修改为Nominal Reading, Maximun, 和Minimumd高字节。
+    将数据提升为16位，同时也要根据SDR_SENSOR_UNITS_1位判断是否为有符号数。
+*/
+#if 0
 #define SDR_LNRT_OFFSET	                    0x27
 #define SDR_LNRT_LEN	                    0x01
 #define SDR_LCT_OFFSET	                    0x28
 #define SDR_LCT_LEN	                        0x01
 #define SDR_LNCT_OFFSET	                    0x29
 #define SDR_LNCT_LEN	                    0x01
+#else
+#define SDR_NORMAL_READING_HIGH_OFFSET     0X27
+#define SDR_NORMAL_READING_HIGH_LEN        0X01
+#define SDR_NORMAL_MAXIMUM_HIGH_OFFSET     0X28
+#define SDR_NORMAL_MAXIMUM_HIGH_LEN        0X01
+#define SDR_NORMAL_MINIMUM_HIGH_OFFSET     0X29
+#define SDR_NORMAL_MINIMUM_HIGH_LEN        0X01
+#endif //!0
+
 #define SDR_PGTH_VAL_OFFSET	                0x2A
 #define SDR_PGTH_VAL_LEN	                0x01
 #define SDR_NGTH_VAL_OFFSET	                0x2B
@@ -103,6 +127,37 @@
 #define GET_SDR_INFO_RES_LEN                6
 #define GET_SDR_REQ_LEN                     6
 
+#define SDR_MAX_LEN                         4*16
+#define SDR_VERIFY                          0x7FF
+#define SENSOR_TYPE_TEMPERATURE             0x01
+#define SENSOR_TYPE_VOLTAGE                 0x02
+#define SENSOR_TYPE_POWER                   0x08
+#define SENSOR_UNIT_CODE_DC                 0x01
+#define SENSOR_UNIT_CODE_V                  0x04
+#define SENSOR_UNIT_CODE_A                  0x05
+
+#define GENGRATE_SDR_DATA(sdr_buf, id, type, units_code, M, MT, R_B, max, min, id_str)                             \
+    {                                                                                                              \
+        memset(sdr_buf, 0, SDR_MAX_LEN);                                                                           \
+        sdr_buf[0]                              = (id & 0x00FF);                                                   \
+        sdr_buf[1]                              = ((id >> 8) & 0x00FF);                                            \
+        sdr_buf[SDR_ID_SRT_TYPE_LEN_OFFSET]     = strlen(id_str);                                                  \
+        sdr_buf[SDR_RECORD_LEN_OFFSET]          = (3 * 16 + sdr_buf[SDR_ID_SRT_TYPE_LEN_OFFSET] - SDR_HEADER_LEN); \
+        sdr_buf[SDR_KEY_OFFSET]                 = g_local_addr;                                                    \
+        sdr_buf[SDR_SENSOR_NUMBER_OFFSET]       = id;                                                              \
+        sdr_buf[SDR_ENTITY_INSTANCE_OFFSET]     = 0x60 + id;                                                       \
+        sdr_buf[SDR_SENSOR_TYPE_OFFSET]         = type;                                                            \
+        sdr_buf[SDR_SENSOR_UNITS_2_OFFSET]      = units_code;                                                      \
+        sdr_buf[SDR_M_OFFSET]                   = M;                                                               \
+        sdr_buf[SDR_M_TOLERANCE_OFFSET]         = MT;                                                              \
+        sdr_buf[SDR_R_B_EXP_OFFSET]             = R_B;                                                             \
+        sdr_buf[SDR_NORMAL_MAX_READING_OFFSET]  = (max & 0x00FF);                                                  \
+        sdr_buf[SDR_NORMAL_MAXIMUM_HIGH_OFFSET] = ((max & 0xFF00) >> 8);                                           \
+        sdr_buf[SDR_NORMAL_MIN_READING_OFFSET]  = (min & 0x00FF);                                                  \
+        sdr_buf[SDR_NORMAL_MINIMUM_HIGH_OFFSET] = ((min & 0xFF00) >> 8);                                           \
+        memcpy((sdr_buf + SDR_ID_STR_BYTE_OFFSET), id_str, sdr_buf[SDR_ID_SRT_TYPE_LEN_OFFSET]);                   \
+}
+
 typedef struct {
     unsigned short id;
     unsigned short addr;
@@ -115,9 +170,40 @@ typedef struct{
     unsigned char sdr_count;
 }sdr_index_info_t;
 
+typedef struct{
+    uint8_t dev_addr;
+    uint8_t sdr_id;
+    uint8_t sensor_type;
+    uint8_t data_unit_code;
+    uint8_t is_data_signed;
+    uint16_t read_data;
+    uint16_t higher_threshold;
+    uint16_t lower_threshold;
+    uint16_t (*sensor_read)(void);
+    short argM;
+    short argK2;
+    char sensor_name[SENSOR_NAME_MAX_LEN];
+    uint8_t name_len;
+}Sdr_t;
+
+typedef struct {
+    uint8_t id;
+    Sdr_t sdr;
+}Res_sdr_t;
+
+typedef struct {
+    uint8_t sdr_count;
+    Sdr_t * p_sdr_list[SDR_MAX_COUNT];
+}Sdr_index_t;
+
+
 unsigned char index_sdr(sdr_index_info_t* sdr_info);
 float reading_date_conversion(unsigned char* sdr_start_units1);
 char* get_val_str(unsigned char* sdr_start_units1);
 float data_conversion(short data, unsigned char* sdr_start_M);
+void get_M_K2(short *M, short *K2, unsigned char *sdr_start_units1);
+
+void init_sdr(Sdr_index_t *sdr_index);
+uint8_t sdr_setData(Sdr_index_t *sdr, uint8_t sdr_id, uint16_t data);
 
 #endif // !__IPMI_SDR_H

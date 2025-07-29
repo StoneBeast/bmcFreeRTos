@@ -3,7 +3,7 @@
  * @Date         : 2025-02-06 17:16:38
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-21 08:50:45
+ * @LastEditTime : 2025-06-11 14:59:59
  * @Description  : 实现该平台的规定接口的硬件操作
  */
 
@@ -13,6 +13,9 @@
 #include "ipmiHardware.h"
 #include "ipmiConfig.h"
 #include "cmsis_os.h"
+#include "nct75.h"
+
+#define MIN(a,b) (a>b?b:a)
 
 extern uint8_t add_msg_list(uint8_t* msg, uint16_t len);
 
@@ -22,6 +25,7 @@ extern unsigned short g_ipmb_msg_len;
 extern unsigned char g_local_addr;
 extern volatile uint8_t g_adc_conv_flag;
 uint16_t adc_data[6] = {0};
+nct75_t nct75_0, nct75_1;
 
 unsigned char __USER_IMPLEMENTATION read_GA_Pin(void)
 {
@@ -32,7 +36,6 @@ void __USER_IMPLEMENTATION init_ipmb_i2c(uint8_t local_addr)
 {
     /* init i2c */
     MX_I2C1_Init(local_addr);
-    HAL_I2C_EnableListen_IT(&hi2c1); 
 }
 
 uint8_t __USER_IMPLEMENTATION send_i2c_msg(uint8_t* msg, uint16_t len)
@@ -74,6 +77,12 @@ void __USER_IMPLEMENTATION init_inter_bus(void)
     MX_I2C2_Init();
 }
 
+void __USER_IMPLEMENTATION init_temp_sensor(void)
+{
+    simple_init_nct75(&nct75_0, 0x48, 0);
+    simple_init_nct75(&nct75_1, 0x4A, 0);
+}
+
 uint8_t __USER_IMPLEMENTATION read_flash(uint16_t addr, uint8_t read_len, uint8_t* data)
 {
     HAL_StatusTypeDef read_ret;
@@ -98,6 +107,9 @@ uint8_t __USER_IMPLEMENTATION read_flash(uint16_t addr, uint8_t read_len, uint8_
 
 uint8_t __USER_IMPLEMENTATION write_flash(uint16_t addr, uint8_t write_len, uint8_t* data)
 {
+    uint16_t addr_p = addr;
+    uint8_t cr_write_count = 0;
+    uint8_t* pw_data = data;
     HAL_StatusTypeDef write_ret;
 
     /* 避免busy被错位置高导致总线锁死 */
@@ -111,9 +123,16 @@ uint8_t __USER_IMPLEMENTATION write_flash(uint16_t addr, uint8_t write_len, uint
         }
     }
 
-    write_ret = HAL_I2C_Mem_Write(&hi2c2, FLASH_ADDR_PADDR(addr), addr, 1, data, write_len, 100);
-    if (write_ret != HAL_OK)
-        return 0;
+    /* 初次写入并对齐 */
+    while (write_len > 0) {
+        cr_write_count = (AT24C16_PAGE_SIZE - (addr_p % AT24C16_PAGE_SIZE));
+        cr_write_count = MIN(cr_write_count, write_len);
+        write_ret = HAL_I2C_Mem_Write(&hi2c2, FLASH_ADDR_PADDR(addr_p), addr_p, 1, pw_data, cr_write_count, 100);
+        if (write_ret != HAL_OK)
+            return 0;
+        write_len -= cr_write_count;
+        addr_p += cr_write_count;
+    }
 
     return 1;
 }
@@ -123,6 +142,10 @@ uint32_t __USER_IMPLEMENTATION get_sys_ticks(void)
     return HAL_GetTick();
 }
 
+/* 
+    TODO: 如果传感器的数据是没有标准类型对应的有符号数，需要在此转换为标准类型，
+          例如读取到的数据为12位有符号，需要在此将其转换为16位有符号数，再向上进行传递。
+*/
 static void __USER_IMPLEMENTATION read_adc()
 {
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_data, 4);
@@ -130,25 +153,45 @@ static void __USER_IMPLEMENTATION read_adc()
     g_adc_conv_flag = 0;
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr1_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr1_sensor_data(void)
 {
     read_adc();
-    return adc_data[0]>>4;
+    return adc_data[0];
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr2_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr2_sensor_data(void)
 {
-    return adc_data[1]>>4;
+    return adc_data[1];
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr3_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr3_sensor_data(void)
 {
-    return adc_data[2]>>4;
+    return adc_data[2];
 }
 
-uint8_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void)
+uint16_t __USER_IMPLEMENTATION read_sdr4_sensor_data(void)
 {
-    return adc_data[3]>>4;
+    return adc_data[3];
+}
+
+uint16_t __USER_IMPLEMENTATION read_sdr5_sensor_data(void)
+{
+    return nct75_read_rawData(&nct75_0);
+}
+
+uint16_t __USER_IMPLEMENTATION read_sdr6_sensor_data(void)
+{
+    return nct75_read_rawData(&nct75_1);
+}
+
+void __USER_IMPLEMENTATION close_battery(void)
+{
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+}
+
+void __USER_IMPLEMENTATION battery_warn(void)
+{
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_RESET);
 }
 
 // 侦听完成回调函数（完成一次完整的i2c通信以后会进入该函数）

@@ -3,7 +3,7 @@
  * @Date         : 2025-03-05 18:52:48
  * @Encoding     : UTF-8
  * @LastEditors  : stoneBeast
- * @LastEditTime : 2025-03-19 18:14:22
+ * @LastEditTime : 2025-07-23 16:51:12
  * @Description  : SDR相关操作函数
  */
 
@@ -17,6 +17,27 @@
 #include "ipmiEvent.h"
 #include "link_list.h"
 #include "cmsis_os.h"
+
+#define MIN(a, b) (a > b ? b : a)
+#define FILL_SDR_STRUCT(p_sdr, id, addr, type, unit, sig, higher, lower, read_handler, M, K, name, n_len) \
+    {                                                                                               \
+        (p_sdr)->sdr_id           = id;                                                             \
+        (p_sdr)->dev_addr         = addr;                                                           \
+        (p_sdr)->sensor_type      = type;                                                           \
+        (p_sdr)->data_unit_code   = unit;                                                           \
+        (p_sdr)->is_data_signed   = sig;                                                            \
+        (p_sdr)->read_data        = 0;                                                              \
+        (p_sdr)->higher_threshold = higher;                                                         \
+        (p_sdr)->lower_threshold  = lower;                                                          \
+        (p_sdr)->sensor_read      = read_handler;                                                   \
+        (p_sdr)->argM             = M;                                                              \
+        (p_sdr)->argK2            = K;                                                              \
+        memset((p_sdr)->sensor_name, 0, SENSOR_NAME_MAX_LEN);                                       \
+        memcpy((p_sdr)->sensor_name, name, MIN(n_len, SENSOR_NAME_MAX_LEN));                        \
+        (p_sdr)->name_len = MIN(n_len, SENSOR_NAME_MAX_LEN);                                        \
+    }
+
+extern unsigned char g_local_addr;
 
 /*** 
  * @brief 返回单位
@@ -56,7 +77,7 @@ static char* get_unit(uint8_t unit_code)
 static short get_M_B(uint8_t byte_L, uint8_t byte_H)
 {
     // 1. 提取高2位
-    uint8_t high_bits = (byte_H >> 6) & 0x03; 
+    uint16_t high_bits = byte_H & 0x03; 
 
     // 2. 组合为10位数值
     uint16_t combined = (high_bits << 8) | byte_L; 
@@ -115,6 +136,7 @@ float reading_date_conversion(uint8_t* sdr_start_units1)
     
     /* 这里省略判断unit1中关于data的位的标志位，默认为无符号 */
     raw_value = (short)(sdr_start_units1[11]);
+    raw_value |= (short)(((short)(sdr_start_units1[19]))<<8);
 
     data = data_conversion(raw_value, &(sdr_start_units1[4]));
 
@@ -139,6 +161,25 @@ char* get_val_str(uint8_t* sdr_start_units1)
     return ret_str;
 }
 
+void get_M_K2(short* M, short* K2, uint8_t* sdr_start_units1)
+{
+    short temp_M = 0;
+    short temp_K2 = 0;
+    uint8_t temp_k = 0;
+
+    temp_M = get_M_B(sdr_start_units1[4], sdr_start_units1[5]);
+    temp_k = ((sdr_start_units1[9] >> 4) & 0x0F);
+    if (temp_k & 0x08) {
+        /* 负数 */
+        temp_K2 = (short)(temp_k | 0xFFF0);
+    } else {
+        temp_K2 = (short)temp_k;
+    }
+
+    *M = temp_M;
+    *K2 = temp_K2;
+}
+
 uint8_t index_sdr(sdr_index_info_t* sdr_info)
 {
     uint16_t start_addr = 0x0000;
@@ -151,6 +192,8 @@ uint8_t index_sdr(sdr_index_info_t* sdr_info)
 
     while (read_flash(start_addr, SDR_HEADER_LEN, sdr_head))
     {
+        write_flash(start_addr + SDR_SENSOR_OWNER_ID_OFFSET, 1, &g_local_addr);
+
         temp_id = ((uint16_t*)(sdr_head))[SDR_RECORD_ID_OFFSET];
         temp_len = sdr_head[SDR_RECORD_LEN_OFFSET] + SDR_HEADER_LEN;
         temp_sensor_num = sdr_head[SDR_SENSOR_NUMBER_OFFSET];
@@ -171,4 +214,70 @@ uint8_t index_sdr(sdr_index_info_t* sdr_info)
 
     }
     return 0;
+}
+
+void init_sdr(Sdr_index_t * sdr_index)
+{
+    uint8_t i = 0;
+    sdr_index->sdr_count = SENSOR_COUNT;
+
+    for (i =0; i<SENSOR_COUNT; i++)
+        sdr_index->p_sdr_list[i] = malloc(sizeof(Sdr_t));
+
+    /* 01: ADC01 */
+    FILL_SDR_STRUCT(sdr_index->p_sdr_list[0],
+                    0x01, g_local_addr, SENSOR_TYPE_POWER,
+                    SENSOR_UNIT_CODE_A, 0,
+                    0x0000FFFF, 0x00,
+                    read_sdr1_sensor_data,
+                    32226, -7, "12V_MON", 7);
+
+    /* 02: ADC02 */
+    FILL_SDR_STRUCT(sdr_index->p_sdr_list[1],
+                    0x02, g_local_addr, SENSOR_TYPE_VOLTAGE,
+                    SENSOR_UNIT_CODE_V, 0,
+                    0x0000FFFF, 0x4D9,
+                    read_sdr2_sensor_data,
+                    16113, -7, "BAT_MON", 7);
+
+    /* 03: ADC03 */
+    FILL_SDR_STRUCT(sdr_index->p_sdr_list[2],
+                    0x03, g_local_addr, SENSOR_TYPE_VOLTAGE,
+                    SENSOR_UNIT_CODE_V, 0,
+                    0x0000FFFF, 0x00,
+                    read_sdr3_sensor_data,
+                    16113, -7, "GBE_1V1", 7);
+
+    /* 04: ADC04 */
+    FILL_SDR_STRUCT(sdr_index->p_sdr_list[3],
+                    0x04, g_local_addr, SENSOR_TYPE_VOLTAGE,
+                    SENSOR_UNIT_CODE_V, 0,
+                    0x0000FFFF, 0x00,
+                    read_sdr4_sensor_data,
+                    16113, -7, "P3V3", 4);
+
+    /* 05: Temper01 */
+    FILL_SDR_STRUCT(sdr_index->p_sdr_list[4],
+                    0x05, g_local_addr, SENSOR_TYPE_TEMPERATURE,
+                    SENSOR_UNIT_CODE_DC, 1,
+                    0x00007FFF, 0x9001,
+                    read_sdr5_sensor_data,
+                    625, -4, "TMP_A", 5);
+
+    /* 06: Temper02 */
+    FILL_SDR_STRUCT(sdr_index->p_sdr_list[5],
+                    0x06, g_local_addr, SENSOR_TYPE_TEMPERATURE,
+                    SENSOR_UNIT_CODE_DC, 1,
+                    0x00007FFF, 0x9001,
+                    read_sdr6_sensor_data,
+                    625, -4, "TMP_B", 5);
+}
+
+uint8_t sdr_setData(Sdr_index_t *sdr, uint8_t sdr_id, uint16_t data)
+{
+    if (sdr_id > sdr->sdr_count)
+        return 0;
+    
+    sdr->p_sdr_list[sdr_id-1]->read_data = data;
+    return 1;
 }
